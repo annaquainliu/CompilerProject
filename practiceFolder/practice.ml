@@ -32,3 +32,14 @@ let unzip = function
 let () = assert (unzip ["a", "b"; "d", "e"; "f", "g"] = (["a"; "d"; "f"], ["b"; "e"; "g"]))
 let () = assert (unzip [] = ([],[]))
 
+let rec foldl f acc xs = match xs with 
+        | [] -> acc
+        | (x::xs) -> foldl f (f x acc) xs
+
+let () = assert ((foldl (fun a b -> a::b) [] [1;2;3]) = [3;2;1])
+
+let rec foldr f acc xs = match xs with 
+        | [] -> acc
+        | (x::xs) -> f x (foldr f acc xs)
+
+let () = assert ((foldr (fun a b -> a::b) [] [1;2;3]) = [1;2;3])
