@@ -9,3 +9,4 @@ allegedly
 
 ## To Do
 - [ ] Create AST
+- [ ] Download OCaml compiler
