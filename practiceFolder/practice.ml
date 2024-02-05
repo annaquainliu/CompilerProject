@@ -43,3 +43,18 @@ let rec foldr f acc xs = match xs with
         | (x::xs) -> f x (foldr f acc xs)
 
 let () = assert ((foldr (fun a b -> a::b) [] [1;2;3]) = [1;2;3])
+
+(* 
+  Turns any list into a string, accepting 
+  f which is a function that turns each element into a string,
+  and xs which is the list.
+*)
+let listToString f xs = 
+    let rec stringify = function 
+      |  []         -> ""
+      |  [x]        -> (f x)
+      |  (x::xs)    -> (f x) ^ ", " ^ stringify xs
+    in "[" ^ stringify xs ^ "]"
+
+let () = print_endline (listToString string_of_int [1;2;3;4])
+let () = print_endline (listToString (fun (a, b) -> "(" ^ a ^", "^ string_of_int b ^ ")") ["a", 3;"asda", 45435;"taylor", 1989;"swift", 233])
