@@ -8,4 +8,4 @@ allegedly
 - Lazy evaluation
 
 ## To Do
-[] Create AST
+- [] Create AST
