@@ -4,9 +4,8 @@ let list_to_string f xs =
     let rec stringify = function 
       |  []         -> ""
       |  [x]        -> (f x)
-      |  (x::xs)    -> (f x) ^ "|" ^ stringify xs
-    in "[" ^ stringify xs ^ "]"
-
+      |  (x::xs)    -> (f x) ^ "\n" ^ stringify xs
+    in stringify xs
 
 let rec parse input = 
     let rec extract input str = match input with 
