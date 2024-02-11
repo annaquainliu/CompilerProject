@@ -1,12 +1,6 @@
 # CompilerProject
 allegedly
 
-## Features
-- Pattern matching
-- Multi-threading ability
-- Type inference
-- Lazy evaluation
+Initialize compiler: eval "$(opam env)"
 
-## To Do
-- [ ] Create AST
-- [ ] Download OCaml compiler
+Compile: ocamlc str.cma -I +str -o interpret interpreter.ml
