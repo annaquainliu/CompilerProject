@@ -36,21 +36,6 @@ let rec interpret_lines () =
 
 (* TOKENIZING! *)
 
-(*
-
-let rec tokenizeLine = function 
-    | [] -> ()
-    | (x::xs) -> 
-        match x with
-        |  "if"  ->  (* if statement *)
-        |  "let" -> (* 3 cases: if next word is 'let' : expression, 'rec' : letrec, anything else : definition*)
-        |  "fn"  -> (* lambda *)
-        |   "("  ->  (* call tokenizeLine again, if the token is a var, create an apply token, else return token *)
-        |   "["  ->  (* list *)
-        |   "\""  -> (* string *)
-        |   x    -> (* check if is a number, else must be a variable *)
-
-*)
 
 let () = interpret_lines ()
 
