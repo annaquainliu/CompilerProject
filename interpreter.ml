@@ -16,12 +16,8 @@ let rec parse input =
                 | c  -> if String.length input == 1
                         then [(str ^ String.make 1 c)]
                         else extract (pop_first_char input) (str ^ String.make 1 c) 
-    in 
-    let tokens = List.filter (fun (a) -> a <> " " && a <> "") (extract input "") in
-    if List.length tokens == 0 && String.length input <> 0 then 
-        [input]
-    else tokens 
-
+    in List.filter (fun (a) -> a <> " " && a <> "") (extract input "")
+    
 let rec interpret_lines () = 
     let _ = print_string "> " in 
     let tokens = (parse (read_line ())) in 
