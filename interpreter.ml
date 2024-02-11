@@ -14,7 +14,7 @@ let rec parse input =
                 | ' ' | ';' | '(' | ')' | '[' | ']' | ',' | '"' -> 
                         str::(String.make 1 input.[0])::(extract (pop_first_char input) "") 
                 | c  -> if String.length input == 1
-                        then (str ^ String.make 1 c)::extract (pop_first_char input) ""
+                        then [(str ^ String.make 1 c)]
                         else extract (pop_first_char input) (str ^ String.make 1 c) 
     in 
     let tokens = List.filter (fun (a) -> a <> " " && a <> "") (extract input "") in
