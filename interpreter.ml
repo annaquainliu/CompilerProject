@@ -112,7 +112,10 @@ let tokenize queue =
       and token = function 
           | "fn"  -> tokenLambda ()
           | "let" -> tokenLetExp ()
-          | "if"  -> IF (token (Queue.pop queue), token (Queue.pop queue), token (Queue.pop queue))
+          | "if"  -> let cond = token (Queue.pop queue) in 
+                     let exp1 = token (Queue.pop queue) in 
+                     let exp2 = token (Queue.pop queue) in 
+                    IF (cond, exp1, exp2)
           | "\""  -> let exp = LITERAL (STRING (Queue.pop queue)) in 
                      let _   = Queue.pop queue in exp
           | "["   -> LITERAL (tokenList (Queue.pop queue))
