@@ -9,6 +9,25 @@ let list_to_string f xs =
       |  (x::xs)    -> (f x) ^ ", " ^ stringify xs
     in "[" ^ stringify xs ^ "]"
 
+exception Not_Found
+exception Ill_Typed
+exception Mismatch_Lengths
+exception Shadowing
+(* 
+    Returns the value of a key in an association list
+   'a -> ('a * 'b) list -> 'b
+*)
+let rec lookup k = function 
+            | [] -> raise Not_Found
+            | ((k', v)::rest) -> if k' = k then v else lookup k rest
+
+(* let rec zip = function 
+    | [] [] -> []
+    | k::ks v::vs -> (k, v)::zip(ks, vs)
+    | _       _       -> raise Mismatch_Lengths *)
+
+let fst = function (a, b) -> a
+let snd = function (a, b) -> b
 (* 
    parse takes in string input and returns a list of tokens,
    which is any keyword or string deliminated by a space
@@ -81,6 +100,8 @@ let rec def_to_string = function
         | (LET (ds, e)) -> "LET(" ^ list_to_string def_to_string ds ^ ", " ^ exp_to_string e ^ ")"
 (* 
   Takes in a queue of strings, and then tokenizes the result
+
+  string queue -> def
 *)
 let tokenize queue = 
       let rec tokenLambda () = 
@@ -128,16 +149,52 @@ let tokenize queue =
                         then LITERAL (NUMBER (int_of_string str))
                         else VAR str 
       and tokenDef = function 
-          | "letdef" -> tokenDef (Queue.pop queue)
+          | "val" -> tokenDef (Queue.pop queue)
           | "rec" -> let name = Queue.pop queue in 
                      let _ = Queue.pop queue in 
                      let keyword = Queue.pop queue in
                      LETREC (name, token keyword)
           |  name -> let _ = Queue.pop queue in LETDEF (name, token (Queue.pop queue))
-      in if (Queue.peek queue) = "letdef" 
+      in if (Queue.peek queue) = "val" 
          then tokenDef (Queue.pop queue)
          else EXP (token (Queue.pop queue))
 
+(* 
+   Given an expression and rho, compute the value it returns
+
+   exp -> (string * value) list -> value
+*)
+(* let eval_exp exp rho = 
+    let rec eval = function 
+        | (LITERAL v) -> v 
+        | (VAR x) -> lookup x rho
+        | (IF (e1, e2, e3)) -> 
+            let bool = eval e1 in 
+                match bool with 
+                    | (BOOLV v) -> if v then eval e2 else eval e3
+                    | _ -> raise Ill_Typed 
+        | (APPLY (f, args)) -> 
+            let closure = eval f in 
+                match closure with 
+                    | (CLOSURE (LAMBDA (names, body), copy_rho)) -> 
+                        let values = List.map (fun a -> eval a) args in 
+                        let rho' = List.append (zip names values) copy_rho in 
+                        eval_exp body rho'
+                    | _ -> raise Ill_Typed
+        | (LAMBDA (names, body)) -> 
+            let rho_names = List.map fst rho in 
+            let exists = List.exists (fun a -> List.mem a rho_names) names in 
+            if exists then raise Shadowing else (CLOSURE (LAMBDA (names, body), rho))
+        | (LET (defs, body)) -> 
+            let final_rho = List.foldr (fun rho' d -> snd (eval_def d rho')) rho defs in 
+            eval_exp body final_rho
+    in eval exp  *)
+(* 
+   def -> (string * value) list -> (value * rho)
+*)
+(* and eval_def def rho = 
+        match def with 
+        |  *)
 (* 
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
