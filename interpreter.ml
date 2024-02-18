@@ -21,10 +21,10 @@ let rec lookup k = function
             | [] -> raise Not_Found
             | ((k', v)::rest) -> if k' = k then v else lookup k rest
 
-(* let rec zip = function 
-    | [] [] -> []
-    | k::ks v::vs -> (k, v)::zip(ks, vs)
-    | _       _       -> raise Mismatch_Lengths *)
+let rec zip xs ys = match xs, ys with
+    | [], [] -> []
+    | k::ks, v::vs -> (k, v)::zip ks vs
+    | _ ,      _       -> raise Mismatch_Lengths
 
 let fst = function (a, b) -> a
 let snd = function (a, b) -> b
@@ -82,22 +82,22 @@ let rec def_to_string = function
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (EXP e) -> "EXP(it, " ^ exp_to_string e ^ ")"
     and exp_to_string = function 
-         | (LITERAL v) ->
-            let rec value_to_string = function 
-                    | (STRING s) -> "STRING(" ^ s ^ ")"
-                    | (NUMBER n) -> "NUMBER(" ^ string_of_int n ^ ")"
-                    | (BOOLV false) -> "BOOLV(false)"
-                    | (BOOLV true) -> "BOOLV(true)"
-                    | NIL -> "NIL"
-                    | UNIT -> "UNIT"
-                    | (PAIR (e, v)) -> "PAIR(" ^ exp_to_string e ^ ", " ^ value_to_string v ^ ")"
-                    | _  -> "error"
-            in value_to_string v
+        | (LITERAL v) -> value_to_string v
         | (VAR s) -> "VAR(" ^ s ^ ")"
         | (IF (e, e2, e3)) -> "IF(" ^ exp_to_string e ^ ", " ^ exp_to_string e2 ^ ", " ^ exp_to_string e3 ^ ")"
         | (APPLY (f, args)) -> "APPLY(" ^ exp_to_string f ^ ", " ^ list_to_string exp_to_string args ^")"
         | (LAMBDA (xs, e))  -> "LAMBDA(" ^ list_to_string (fun a -> a) xs ^ ", " ^ exp_to_string e ^ ")"
         | (LET (ds, e)) -> "LET(" ^ list_to_string def_to_string ds ^ ", " ^ exp_to_string e ^ ")"
+    and value_to_string = function 
+        | (STRING s) -> "STRING(" ^ s ^ ")"
+        | (NUMBER n) -> "NUMBER(" ^ string_of_int n ^ ")"
+        | (BOOLV false) -> "BOOLV(false)"
+        | (BOOLV true) -> "BOOLV(true)"
+        | NIL -> "NIL"
+        | UNIT -> "UNIT"
+        | (PAIR (e, v)) -> "PAIR(" ^ exp_to_string e ^ ", " ^ value_to_string v ^ ")"
+        | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
+        | _ -> "ERROR"
 (* 
   Takes in a queue of strings, and then tokenizes the result
 
@@ -140,11 +140,20 @@ let tokenize queue =
           | "\""  -> let exp = LITERAL (STRING (Queue.pop queue)) in 
                      let _   = Queue.pop queue in exp
           | "["   -> LITERAL (tokenList (Queue.pop queue))
-          | "("   -> let exp = token (Queue.pop queue) in 
+          | "("   -> if (Queue.peek queue) = ")"
+                     then (LITERAL UNIT) else
+                      let exp = token (Queue.pop queue) in 
                       (match exp with
-                        | (VAR x) -> let args = tokenApplyArgs (Queue.pop queue) in 
-                                     APPLY (VAR x, args) 
-                        |  _      -> exp)
+                        | (VAR x) -> 
+                            let args = tokenApplyArgs (Queue.pop queue) in APPLY (exp, args) 
+                        | (LAMBDA (l, e)) -> 
+                            let front = Queue.pop queue in
+                            if front = ")" (* edge case: ending parenthesis around *)
+                            then (LAMBDA (l, e))        (* LAMBDA does NOT mean applying, for example: (fn a b c -> a)*)
+                            else let args = tokenApplyArgs front in APPLY (exp, args) 
+                        |  _      -> let _ = Queue.pop queue in exp)
+          | "false" -> LITERAL (BOOLV false)
+          | "true"  -> LITERAL (BOOLV true)
           |  str    ->  if (Str.string_match (Str.regexp "[0-9]+") str 0)
                         then LITERAL (NUMBER (int_of_string str))
                         else VAR str 
@@ -164,37 +173,51 @@ let tokenize queue =
 
    exp -> (string * value) list -> value
 *)
-(* let eval_exp exp rho = 
+let rec eval_exp exp rho = 
     let rec eval = function 
         | (LITERAL v) -> v 
         | (VAR x) -> lookup x rho
         | (IF (e1, e2, e3)) -> 
             let bool = eval e1 in 
-                match bool with 
+                (match bool with 
                     | (BOOLV v) -> if v then eval e2 else eval e3
-                    | _ -> raise Ill_Typed 
+                    | _ -> raise Ill_Typed)
         | (APPLY (f, args)) -> 
             let closure = eval f in 
-                match closure with 
+                (match closure with 
                     | (CLOSURE (LAMBDA (names, body), copy_rho)) -> 
-                        let values = List.map (fun a -> eval a) args in 
+                        let values = List.map (fun a -> eval a) args in
                         let rho' = List.append (zip names values) copy_rho in 
                         eval_exp body rho'
-                    | _ -> raise Ill_Typed
+                    | _ -> raise Ill_Typed)
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
             let exists = List.exists (fun a -> List.mem a rho_names) names in 
             if exists then raise Shadowing else (CLOSURE (LAMBDA (names, body), rho))
         | (LET (defs, body)) -> 
-            let final_rho = List.foldr (fun rho' d -> snd (eval_def d rho')) rho defs in 
+            let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
-    in eval exp  *)
+    in eval exp  
 (* 
    def -> (string * value) list -> (value * rho)
 *)
-(* and eval_def def rho = 
+and eval_def def rho = 
         match def with 
-        |  *)
+        | LETDEF (name, exp) -> 
+            if List.exists (fun n -> n = name) (List.map fst rho) 
+            then raise Shadowing 
+            else let value = eval_exp exp rho in 
+                (value, (name, value)::rho)
+        | LETREC (name, exp) ->
+            if List.exists (fun n -> n = name) (List.map fst rho) 
+            then raise Shadowing 
+            else let closure = eval_exp exp rho 
+                  in (match closure with 
+                        | (CLOSURE (LAMBDA (args, e), c)) -> 
+                            let rec rho' = (name, (CLOSURE (LAMBDA (args, e), rho')))::rho in 
+                            ((CLOSURE (LAMBDA (args, e), rho')), rho')
+                        |  _ -> raise Ill_Typed)
+        | EXP e -> eval_def (LETDEF ("it", e)) rho
 (* 
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
@@ -202,9 +225,9 @@ let tokenize queue =
 let rec interpret_lines () = 
     let _ = print_string "> " in 
     let tokens = (parse (read_line ())) in 
-    let () = Queue.iter (fun a -> print_endline a) tokens in 
     let def = tokenize tokens in 
-    let () = print_endline (def_to_string def) in 
+    let (value, rho') = eval_def def [] in
+    let () = print_endline (value_to_string value) in 
     interpret_lines ()
 
 let () = interpret_lines ()
