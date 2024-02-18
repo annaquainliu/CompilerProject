@@ -113,8 +113,6 @@ let tokenize queue =
           let names = tokenParams (Queue.pop queue) in 
           let _ = Queue.pop queue  in (* for -> *) 
           let exp  =  token (Queue.pop queue) in 
-          (* edge case: if user has non-applying parenthesis around lambda *)
-          let _ = if (Queue.peek queue) = ")" then Queue.pop queue else "" in 
           LAMBDA (names, exp)
       and tokenLetExp () =
             let rec tokenLetBindings = function 
