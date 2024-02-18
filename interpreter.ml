@@ -12,7 +12,7 @@ let list_to_string f xs =
 exception Not_Found
 exception Ill_Typed
 exception Mismatch_Lengths
-exception Shadowing
+exception Shadowing of string
 (* 
     Returns the value of a key in an association list
    'a -> ('a * 'b) list -> 'b
@@ -190,7 +190,7 @@ let rec eval_exp exp rho =
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
             let exists = List.exists (fun a -> List.mem a rho_names) names in 
-            if exists then raise Shadowing else (CLOSURE (LAMBDA (names, body), rho))
+            if exists then raise (Shadowing "LAMBDA") else (CLOSURE (LAMBDA (names, body), rho))
         | (LET (defs, body)) -> 
             let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
@@ -201,13 +201,13 @@ let rec eval_exp exp rho =
 and eval_def def rho = 
         match def with 
         | LETDEF (name, exp) -> 
-            if List.exists (fun n -> n = name) (List.map fst rho) 
-            then raise Shadowing 
+            if name <> "it" && List.exists (fun n -> n = name) (List.map fst rho) 
+            then raise (Shadowing  "LETDEF")
             else let value = eval_exp exp rho in 
                 (value, (name, value)::rho)
         | LETREC (name, exp) ->
             if List.exists (fun n -> n = name) (List.map fst rho) 
-            then raise Shadowing 
+            then raise (Shadowing "LETREC")
             else let closure = eval_exp exp rho 
                   in (match closure with 
                         | (CLOSURE (LAMBDA (args, e), c)) -> 
@@ -219,14 +219,14 @@ and eval_def def rho =
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
 *)
-let rec interpret_lines () = 
+let rec interpret_lines rho = 
     let _ = print_string "> " in 
     let tokens = (parse (read_line ())) in 
     let def = tokenize tokens in 
-    let (value, rho') = eval_def def [] in
+    let (value, rho') = eval_def def rho in
     let () = print_endline (value_to_string value) in 
-    interpret_lines ()
+    interpret_lines rho'
 
-let () = interpret_lines ()
+let () = interpret_lines []
 
     
