@@ -106,11 +106,15 @@ let rec def_to_string = function
 let tokenize queue = 
       let rec tokenLambda () = 
           let rec tokenParams = function 
-                  | "->"  -> []
+                  | ")"  -> []
                   | x     -> x::tokenParams (Queue.pop queue)
           in 
+          let _ = Queue.pop queue in (* for the opening ( *)
           let names = tokenParams (Queue.pop queue) in 
+          let _ = Queue.pop queue  in (* for -> *) 
           let exp  =  token (Queue.pop queue) in 
+          (* edge case: if user has non-applying parenthesis around lambda *)
+          let _ = if (Queue.peek queue) = ")" then Queue.pop queue else "" in 
           LAMBDA (names, exp)
       and tokenLetExp () =
             let rec tokenLetBindings = function 
@@ -144,13 +148,8 @@ let tokenize queue =
                      then (LITERAL UNIT) else
                       let exp = token (Queue.pop queue) in 
                       (match exp with
-                        | (VAR x) -> 
+                        | (VAR _) | (LAMBDA _) -> 
                             let args = tokenApplyArgs (Queue.pop queue) in APPLY (exp, args) 
-                        | (LAMBDA (l, e)) -> 
-                            let front = Queue.pop queue in
-                            if front = ")" (* edge case: ending parenthesis around *)
-                            then (LAMBDA (l, e))        (* LAMBDA does NOT mean applying, for example: (fn a b c -> a)*)
-                            else let args = tokenApplyArgs front in APPLY (exp, args) 
                         |  _      -> let _ = Queue.pop queue in exp)
           | "false" -> LITERAL (BOOLV false)
           | "true"  -> LITERAL (BOOLV true)
