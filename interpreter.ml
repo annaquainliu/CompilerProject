@@ -72,6 +72,7 @@ and value =    STRING of string
             |  UNIT
             |  PAIR of exp * value
             |  CLOSURE of exp * (string * value) list
+            |  PRIMITIVE of (value list -> value)
 and def =  LETDEF of string * exp
          | LETREC of string * exp 
          | EXP of exp
@@ -97,6 +98,7 @@ let rec def_to_string = function
         | UNIT -> "UNIT"
         | (PAIR (e, v)) -> "PAIR(" ^ exp_to_string e ^ ", " ^ value_to_string v ^ ")"
         | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
+        | (PRIMITIVE f) -> "PRIM"
         | _ -> "ERROR"
 (* 
   Takes in a queue of strings, and then tokenizes the result
@@ -180,12 +182,13 @@ let rec eval_exp exp rho =
                     | (BOOLV v) -> if v then eval e2 else eval e3
                     | _ -> raise Ill_Typed)
         | (APPLY (f, args)) -> 
-            let closure = eval f in 
+            let closure = eval f in
+            let values = List.map (fun a -> eval a) args in
                 (match closure with 
                     | (CLOSURE (LAMBDA (names, body), copy_rho)) -> 
-                        let values = List.map (fun a -> eval a) args in
                         let rho' = List.append (zip names values) copy_rho in 
                         eval_exp body rho'
+                    | (PRIMITIVE f) -> f values
                     | _ -> raise Ill_Typed)
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
@@ -215,6 +218,30 @@ and eval_def def rho =
                             ((CLOSURE (LAMBDA (args, e), rho')), rho')
                         |  _ -> raise Ill_Typed)
         | EXP e -> eval_def (LETDEF ("it", e)) rho
+
+let initial_rho = 
+    [
+    ("<", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a < b)
+                                | _      -> raise Ill_Typed));
+    (">", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a > b)
+                                | _        -> raise Ill_Typed));
+    ("=", PRIMITIVE (fun xs -> match xs with 
+                                   ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a = b)
+                                 | ((BOOLV a)::(BOOLV b)::[])   -> BOOLV (a = b)
+                                 | ((STRING a)::(STRING b)::[]) -> BOOLV (a = b)
+                                | _        -> raise Ill_Typed));
+    ("-", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a - b)
+                                | _        -> raise Ill_Typed));
+    ("+", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a + b)
+                                | _       -> raise Ill_Typed));
+    ("/", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a / b)
+                                | _       -> raise Ill_Typed))
+    ]
 (* 
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
@@ -227,6 +254,6 @@ let rec interpret_lines rho =
     let () = print_endline (value_to_string value) in 
     interpret_lines rho'
 
-let () = interpret_lines []
+let () = interpret_lines initial_rho
 
     
