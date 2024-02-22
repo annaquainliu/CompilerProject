@@ -95,7 +95,6 @@ let rec def_to_string = function
         | (BOOLV false) -> "BOOLV(false)"
         | (BOOLV true) -> "BOOLV(true)"
         | NIL -> "NIL"
-        | UNIT -> "UNIT"
         | (PAIR (e, v)) -> "PAIR(" ^ exp_to_string e ^ ", " ^ value_to_string v ^ ")"
         | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
         | (PRIMITIVE f) -> "PRIM"
@@ -106,34 +105,32 @@ let rec def_to_string = function
   string queue -> def
 *)
 let tokenize queue = 
-      let rec tokenLambda () = 
-          let rec tokenParams = function 
-                  | ")"  -> []
-                  | x     -> x::tokenParams (Queue.pop queue)
-          in 
-          let _ = Queue.pop queue in (* for the opening ( *)
-          let names = tokenParams (Queue.pop queue) in 
-          let _ = Queue.pop queue  in (* for -> *) 
-          let exp  =  token (Queue.pop queue) in 
-          LAMBDA (names, exp)
-      and tokenLetExp () =
-            let rec tokenLetBindings = function 
-              | "in" -> []
-              |  name   -> let def = tokenDef name in 
-                             def::tokenLetBindings (Queue.pop queue)
-            in  let bindings = tokenLetBindings (Queue.pop queue) in
-                let exp = token (Queue.pop queue) in 
-                LET (bindings, exp)
+    let rec tokenLambda () = 
+        let rec tokenParams = function 
+                | "->"  -> []
+                | x     -> x::tokenParams (Queue.pop queue)
+        in 
+        let names = tokenParams (Queue.pop queue) in 
+        let exp  =  token (Queue.pop queue) in 
+        LAMBDA (names, exp)
+    and tokenLetExp () =
+        let rec tokenLetBindings = function 
+            | "in" -> []
+            |  name   -> let def = tokenDef name in 
+                            def::tokenLetBindings (Queue.pop queue)
+        in  let bindings = tokenLetBindings (Queue.pop queue) in
+            let exp = token (Queue.pop queue) in 
+            LET (bindings, exp)
       and tokenList = function
-              | "]" -> NIL
-              |  x  -> let v = token x in
-                       let rest = tokenList (Queue.pop queue) in 
-                       PAIR (v, rest)
+            | "]" -> NIL
+            |  x  -> let v = token x in
+                    let rest = tokenList (Queue.pop queue) in 
+                    PAIR (v, rest)
       and tokenApplyArgs = function 
-              | ")" -> []
-              |  x  -> let arg = (token x) in 
-                       let args = tokenApplyArgs (Queue.pop queue) in 
-                       arg::args 
+             | ")" -> []
+             |  x  -> let arg = token x in 
+                      let args = tokenApplyArgs (Queue.pop queue) in 
+                      arg::args
       and token = function 
           | "fn"  -> tokenLambda ()
           | "let" -> tokenLetExp ()
@@ -141,16 +138,14 @@ let tokenize queue =
                      let exp1 = token (Queue.pop queue) in 
                      let exp2 = token (Queue.pop queue) in 
                     IF (cond, exp1, exp2)
-          | "\""  -> let exp = LITERAL (STRING (Queue.pop queue)) in 
-                     let _   = Queue.pop queue in exp
-          | "["   -> LITERAL (tokenList (Queue.pop queue))
-          | "("   -> if (Queue.peek queue) = ")"
-                     then (LITERAL UNIT) else
-                      let exp = token (Queue.pop queue) in 
-                      (match exp with
-                        | (VAR _) | (LAMBDA _) -> 
-                            let args = tokenApplyArgs (Queue.pop queue) in APPLY (exp, args) 
-                        |  _      -> let _ = Queue.pop queue in exp)
+          | "\"" -> let exp = LITERAL (STRING (Queue.pop queue)) in 
+                    let _   = Queue.pop queue in exp
+          | "["  -> LITERAL (tokenList (Queue.pop queue))
+          | "("  -> let exp = token (Queue.pop queue) in 
+                        (match exp with
+                            | (VAR _) | (APPLY _) | (LAMBDA _) -> 
+                                (let args = tokenApplyArgs (Queue.pop queue) in APPLY (exp, args))
+                            |  _      -> let _ = Queue.pop queue in exp)
           | "false" -> LITERAL (BOOLV false)
           | "true"  -> LITERAL (BOOLV true)
           |  str    ->  if (Str.string_match (Str.regexp "[0-9]+") str 0)
