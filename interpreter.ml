@@ -219,34 +219,29 @@ and eval_def def rho =
                         |  _ -> raise Ill_Typed)
         | EXP e -> eval_def (LETDEF ("it", e)) rho
 
+let math_primop fn = PRIMITIVE (fun xs -> match xs with
+                                    ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)
+                                    | _ -> raise Ill_Typed)
+
 let initial_rho = 
     [
-    ("<", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a < b)
-                                | _      -> raise Ill_Typed));
-    (">", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a > b)
-                                | _        -> raise Ill_Typed));
+    ("<", PRIMITIVE (fun xs -> match xs with
+                            ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a < b)
+                            | _ -> raise Ill_Typed));
+    (">", PRIMITIVE (fun xs -> match xs with
+                            ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a > b)
+                            | _ -> raise Ill_Typed));
     ("=", PRIMITIVE (fun xs -> match xs with 
                                    ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a = b)
                                  | ((BOOLV a)::(BOOLV b)::[])   -> BOOLV (a = b)
                                  | ((STRING a)::(STRING b)::[]) -> BOOLV (a = b)
                                 | _        -> raise Ill_Typed));
-    ("-", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a - b)
-                                | _        -> raise Ill_Typed));
-    ("+", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a + b)
-                                | _       -> raise Ill_Typed));
-    ("/", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a / b)
-                                | _       -> raise Ill_Typed));
-    ("*", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a * b)
-                                | _       -> raise Ill_Typed));
-    ("mod", PRIMITIVE (fun xs -> match xs with 
-                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a mod b)
-                                | _       -> raise Ill_Typed));
+    ("-", math_primop (-));
+    ("+", math_primop (+));
+    ("/", math_primop (/));
+    ("*", math_primop ( * ) );
+    ("mod", math_primop (mod));
+
     ]
 (* 
     interpret_lines runs indefintely, 
