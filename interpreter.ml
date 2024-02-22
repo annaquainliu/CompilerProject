@@ -70,7 +70,7 @@ and value =    STRING of string
             |  BOOLV  of bool
             |  NIL
             |  UNIT
-            |  PAIR of exp * value
+            |  PAIR of value * value
             |  CLOSURE of exp * (string * value) list
             |  PRIMITIVE of (value list -> value)
 and def =  LETDEF of string * exp
@@ -95,7 +95,7 @@ let rec def_to_string = function
         | (BOOLV false) -> "BOOLV(false)"
         | (BOOLV true) -> "BOOLV(true)"
         | NIL -> "NIL"
-        | (PAIR (e, v)) -> "PAIR(" ^ exp_to_string e ^ ", " ^ value_to_string v ^ ")"
+        | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
         | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
         | (PRIMITIVE f) -> "PRIM"
         | _ -> "ERROR"
@@ -123,9 +123,10 @@ let tokenize queue =
             LET (bindings, exp)
       and tokenList = function
             | "]" -> NIL
-            |  x  -> let v = token x in
-                    let rest = tokenList (Queue.pop queue) in 
-                    PAIR (v, rest)
+            |  x  -> match token x with
+                     | (LITERAL v) -> let rest = tokenList (Queue.pop queue) in 
+                                      PAIR (v, rest)
+                     | _  -> raise Ill_Typed
       and tokenApplyArgs = function 
              | ")" -> []
              |  x  -> let arg = token x in 
@@ -169,7 +170,7 @@ let tokenize queue =
 *)
 let rec eval_exp exp rho = 
     let rec eval = function 
-        | (LITERAL v) -> v 
+        | (LITERAL v) -> v
         | (VAR x) -> lookup x rho
         | (IF (e1, e2, e3)) -> 
             let bool = eval e1 in 
@@ -218,6 +219,9 @@ let math_primop fn = PRIMITIVE (fun xs -> match xs with
                                     ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)
                                     | _ -> raise Ill_Typed)
 
+let bin_primop fn = PRIMITIVE (fun xs -> match xs with 
+                                    ((BOOLV a)::(BOOLV b)::[]) -> BOOLV (fn a b)
+                                    | _ -> raise Ill_Typed)
 let initial_rho = 
     [
     ("<", PRIMITIVE (fun xs -> match xs with
@@ -230,14 +234,22 @@ let initial_rho =
                                    ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a = b)
                                  | ((BOOLV a)::(BOOLV b)::[])   -> BOOLV (a = b)
                                  | ((STRING a)::(STRING b)::[]) -> BOOLV (a = b)
-                                | _        -> raise Ill_Typed));
+                                 | _        -> raise Ill_Typed));
     ("-", math_primop (-));
     ("+", math_primop (+));
     ("/", math_primop (/));
     ("*", math_primop ( * ) );
     ("mod", math_primop (mod));
-
+    (* ("car", PRIMITIVE (fun xs -> match xs with 
+                                (PAIR ()))) *)
     ]
+
+let standard_lib = List.fold_right 
+                        (fun a acc -> (snd (eval_def (tokenize (parse a)) acc)) ) 
+                        ["val && = fn a b -> if a b false"; 
+                            "val || = fn a b -> if a true b"] 
+                        initial_rho
+
 (* 
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
@@ -250,6 +262,6 @@ let rec interpret_lines rho =
     let () = print_endline (value_to_string value) in 
     interpret_lines rho'
 
-let () = interpret_lines initial_rho
+let () = interpret_lines standard_lib
 
     
