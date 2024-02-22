@@ -240,7 +240,13 @@ let initial_rho =
                                 | _       -> raise Ill_Typed));
     ("/", PRIMITIVE (fun xs -> match xs with 
                                 ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a / b)
-                                | _       -> raise Ill_Typed))
+                                | _       -> raise Ill_Typed));
+    ("*", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a * b)
+                                | _       -> raise Ill_Typed));
+    ("mod", PRIMITIVE (fun xs -> match xs with 
+                                ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (a mod b)
+                                | _       -> raise Ill_Typed));
     ]
 (* 
     interpret_lines runs indefintely, 
