@@ -9,7 +9,7 @@ let list_to_string f xs =
       |  (x::xs)    -> (f x) ^ ", " ^ stringify xs
     in "[" ^ stringify xs ^ "]"
 
-exception Not_Found
+exception Not_Found of string
 exception Ill_Typed
 exception Mismatch_Lengths
 exception Shadowing of string
@@ -18,7 +18,7 @@ exception Shadowing of string
    'a -> ('a * 'b) list -> 'b
 *)
 let rec lookup k = function 
-            | [] -> raise Not_Found
+            | [] -> raise (Not_Found k)
             | ((k', v)::rest) -> if k' = k then v else lookup k rest
 
 let rec zip xs ys = match xs, ys with
@@ -76,7 +76,8 @@ and value =    STRING of string
 and def =  LETDEF of string * exp
          | LETREC of string * exp 
          | EXP of exp
-
+(* 
+type datatype = CONS of string * (list) *)
 
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
@@ -241,14 +242,18 @@ let initial_rho =
     ("*", math_primop ( * ) );
     ("mod", math_primop (mod));
     ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise Ill_Typed));
-    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise Ill_Typed))
+    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise Ill_Typed));
+    ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false))
     ]
 
-let standard_lib = List.fold_right 
-                        (fun a acc -> (snd (eval_def (tokenize (parse a)) acc)) ) 
-                        ["val && = fn a b -> if a b false"; 
-                            "val || = fn a b -> if a true b"] 
+let standard_lib = List.fold_left 
+                        (fun acc a -> (snd (eval_def (tokenize (parse a)) acc)) ) 
                         initial_rho
+                        [
+                            "val && = fn a b -> if a b false"; 
+                            "val || = fn a b -> if a true b";
+                            "val rec exists? = fn f xs -> if (null? xs) false (|| (f (car xs)) (exists? f (cdr xs)))"
+                        ] 
 
 (* 
     interpret_lines runs indefintely, 
