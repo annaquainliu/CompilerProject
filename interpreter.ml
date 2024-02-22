@@ -240,8 +240,8 @@ let initial_rho =
     ("/", math_primop (/));
     ("*", math_primop ( * ) );
     ("mod", math_primop (mod));
-    (* ("car", PRIMITIVE (fun xs -> match xs with 
-                                (PAIR ()))) *)
+    ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise Ill_Typed));
+    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise Ill_Typed))
     ]
 
 let standard_lib = List.fold_right 
