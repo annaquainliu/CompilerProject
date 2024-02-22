@@ -10,7 +10,7 @@ let list_to_string f xs =
     in "[" ^ stringify xs ^ "]"
 
 exception Not_Found of string
-exception Ill_Typed
+exception Ill_Typed of string 
 exception Mismatch_Lengths
 exception Shadowing of string
 (* 
@@ -18,7 +18,7 @@ exception Shadowing of string
    'a -> ('a * 'b) list -> 'b
 *)
 let rec lookup k = function 
-            | [] -> raise (Not_Found k)
+            | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
             | ((k', v)::rest) -> if k' = k then v else lookup k rest
 
 let rec zip xs ys = match xs, ys with
@@ -127,7 +127,7 @@ let tokenize queue =
             |  x  -> match token x with
                      | (LITERAL v) -> let rest = tokenList (Queue.pop queue) in 
                                       PAIR (v, rest)
-                     | _  -> raise Ill_Typed
+                     | _  -> (raise (Ill_Typed "Cannot have non-values in list"))
       and tokenApplyArgs = function 
              | ")" -> []
              |  x  -> let arg = token x in 
@@ -177,7 +177,7 @@ let rec eval_exp exp rho =
             let bool = eval e1 in 
                 (match bool with 
                     | (BOOLV v) -> if v then eval e2 else eval e3
-                    | _ -> raise Ill_Typed)
+                    | _ -> raise (Ill_Typed "Condition is not a boolean."))
         | (APPLY (f, args)) -> 
             let closure = eval f in
             let values = List.map (fun a -> eval a) args in
@@ -186,7 +186,7 @@ let rec eval_exp exp rho =
                         let rho' = List.append (zip names values) copy_rho in 
                         eval_exp body rho'
                     | (PRIMITIVE f) -> f values
-                    | _ -> raise Ill_Typed)
+                    | _ -> raise (Ill_Typed "Cannot apply non-function."))
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
             let exists = List.exists (fun a -> List.mem a rho_names) names in 
@@ -213,36 +213,36 @@ and eval_def def rho =
                         | (CLOSURE (LAMBDA (args, e), c)) -> 
                             let rec rho' = (name, (CLOSURE (LAMBDA (args, e), rho')))::rho in 
                             ((CLOSURE (LAMBDA (args, e), rho')), rho')
-                        |  _ -> raise Ill_Typed)
+                        |  _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
         | EXP e -> eval_def (LETDEF ("it", e)) rho
 
 let math_primop fn = PRIMITIVE (fun xs -> match xs with
                                     ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)
-                                    | _ -> raise Ill_Typed)
+                                    | _ -> raise (Ill_Typed "Cannot apply math operation to non-numbers."))
 
 let bin_primop fn = PRIMITIVE (fun xs -> match xs with 
                                     ((BOOLV a)::(BOOLV b)::[]) -> BOOLV (fn a b)
-                                    | _ -> raise Ill_Typed)
+                                    | _ -> raise (Ill_Typed "Cannot apply boolean operation to non-booleans."))
 let initial_rho = 
     [
     ("<", PRIMITIVE (fun xs -> match xs with
                             ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a < b)
-                            | _ -> raise Ill_Typed));
+                            | _ -> raise (Ill_Typed "Cannot apply < to non-numbers.")));
     (">", PRIMITIVE (fun xs -> match xs with
                             ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a > b)
-                            | _ -> raise Ill_Typed));
+                            | _ -> raise (Ill_Typed "Cannot apply > to non-numbers.")));
     ("=", PRIMITIVE (fun xs -> match xs with 
                                    ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a = b)
                                  | ((BOOLV a)::(BOOLV b)::[])   -> BOOLV (a = b)
                                  | ((STRING a)::(STRING b)::[]) -> BOOLV (a = b)
-                                 | _        -> raise Ill_Typed));
+                                 | _        -> raise (Ill_Typed "Cannot apply = to non-primitives.")));
     ("-", math_primop (-));
     ("+", math_primop (+));
     ("/", math_primop (/));
     ("*", math_primop ( * ) );
     ("mod", math_primop (mod));
-    ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise Ill_Typed));
-    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise Ill_Typed));
+    ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
+    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
     ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false))
     ]
 
@@ -252,7 +252,8 @@ let standard_lib = List.fold_left
                         [
                             "val && = fn a b -> if a b false"; 
                             "val || = fn a b -> if a true b";
-                            "val rec exists? = fn f xs -> if (null? xs) false (|| (f (car xs)) (exists? f (cdr xs)))"
+                            "val rec exists? = fn f xs -> if (null? xs) false (|| (f (car xs)) (exists? f (cdr xs)))";
+                            "val rec all? = fn f xs -> if (null? xs) true (&& (f (car xs)) (all? f (cdr xs)))";
                         ] 
 
 (* 
