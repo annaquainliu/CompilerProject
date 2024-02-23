@@ -122,6 +122,13 @@ let rec solve c = match c with
     | (TYVAR a, CONAPP _)  -> if member a (ftvs t2) then raise typeInferenceBug else a --> t2
     | (TYCON c1, TYCON c2) -> if c1 = c2 then [] else raise typeInferenceBug
     | (TYCON _, CONAPP _)  -> raise typeInferenceBug
+    | (CONAPP(t1, t1s), CONAPP(t2, t2s)) -> 
+        let rec zip l1 l2 acc = match (l1, l2) with
+        | ([], [])       -> List.reverse acc
+        | (x::xs, y::ys) -> zip(xs ys ((x, y)::acc))
+        | _              -> raise typeInferenceBug in
+        let zipped = zip t1s t2s [] in
+        List.fold_left(fun (t, t') acc -> compose(acc, solve(consubst acc (t ^^ t')))) (t1 ^^ t2) zipped
     | _                    -> solve (t2 ^^ t1)
 
 
