@@ -57,7 +57,7 @@ let rec parse input =
     queue
     
 
-(* TOKENIZING! *)
+(* Expression/Definitions! *)
 
 type exp = LITERAL of value
          | VAR of string 
@@ -76,8 +76,29 @@ and value =    STRING of string
 and def =  LETDEF of string * exp
          | LETREC of string * exp 
          | EXP of exp
-(* 
-type datatype = CONS of string * (list) *)
+
+(* Types! *)
+type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
+let intty = TYCON "int"
+let boolty = TYCON "bool"
+let strty = TYCON "string"
+let listty t = CONAPP(TYCON "list", [t])
+let funtype (args, result) =
+  CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
+
+type tyscheme = FORALL of string list * ty
+
+
+(* type datatype_val = CONSVAL datatype_cons * (value list)
+    and datatype =  DATATYPE of string
+                  | TYPE of ty
+    and datatype_cons = CONS of string * ((datatype list) -> cons_val) 
+             *)
+(*
+    Kind Environment:
+    
+*)
+(* let kind = ["string" ] *)
 
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
