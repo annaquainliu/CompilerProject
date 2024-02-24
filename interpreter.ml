@@ -13,6 +13,7 @@ exception Not_Found of string
 exception Ill_Typed of string 
 exception Mismatch_Lengths
 exception Shadowing of string
+exception KindError of string
 (* 
     Returns the value of a key in an association list
    'a -> ('a * 'b) list -> 'b
@@ -69,7 +70,6 @@ and value =    STRING of string
             |  NUMBER of int
             |  BOOLV  of bool
             |  NIL
-            |  UNIT
             |  PAIR of value * value
             |  CLOSURE of exp * (string * value) list
             |  PRIMITIVE of (value list -> value)
@@ -83,21 +83,105 @@ let intty = TYCON "int"
 let boolty = TYCON "bool"
 let strty = TYCON "string"
 let listty t = CONAPP(TYCON "list", [t])
+let tuple list = CONAPP (TYCON "tuple", list)
 let funtype (args, result) =
   CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
 
 type tyscheme = FORALL of string list * ty
 
 
-(* type datatype_val = CONSVAL datatype_cons * (value list)
-    and datatype =  DATATYPE of string
-                  | TYPE of ty
-    and datatype_cons = CONS of string * ((datatype list) -> cons_val) 
-             *)
 (*
     Kind Environment:
-    
+
+    Mapping of names to kinds.
+
+    Every time a user create a valid datatype, the datatype will
+    be added to the kind environment.
 *)
+
+(* Type or type in waiting *)
+type kind = TYPE | INWAITING (kind list * kind)
+
+let initial_delta = [("int", TYPE); ("bool", TYPE); ("string", TYPE); 
+                        ("list", INWAITING ([TYPE], TYPE));]
+(* 
+let kindof tau Delta = 
+    let eqKind x y = 
+       (match x, y with
+            | TYPE, TYPE -> true
+            | (INWAITING (kinds, kind), INWAITING (kinds', kind')) ->  
+                eqKinds kinds kinds' && eqKind kind kind'
+            | _ -> false)
+    and eqKinds xs ys =
+        match xs, ys with 
+            | ([], []) -> true 
+            | (kind::kinds, kind'::kinds') -> eqKind kind kind' && eqKinds kinds kinds' 
+            | _ -> false
+    let badkind = (fun tau -> (kind tau) <> TYPE)
+    let kind = match tau with 
+                | (TYVAR a) -> lookup a Delta
+                | (TYCON c) -> lookup c Delta
+                | (CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args)], result)) -> 
+                    match kind result with 
+                        | TYPE -> if List.exists badkind args 
+                                  then raise (KindError "Argument gave kind error")
+                                  else TYPE
+                        | _ -> raise (KindError "") 
+                | (CONAPP (TYCON "tuple", [taus])) -> 
+                    if List.exists badkind taus 
+                    then raise (KindError "Tuple argument gave kind error")
+                    else TYPE
+                | (CONAPP (tau, taus)) -> 
+                    match kind tau with 
+                        | (INWAITING (kinds, kind)) -> 
+                            let conapp_kinds = map kind 
+    in kind tau *)
+    
+
+(* fun kindof (tau, Delta) =
+  let (* definition of internal function [[kind]] 388a *)
+      fun kind (TYVAR a) =
+            (find (a, Delta)
+             handle NotFound _ => raise TypeError ("unknown type variable " ^ a)
+                                                                               )
+      (* definition of internal function [[kind]] 388b *)
+        | kind (TYCON c) =
+            (find (c, Delta)
+             handle NotFound _ => raise TypeError ("unknown type constructor " ^
+                                                                             c))
+      (* definition of internal function [[kind]] 388c *)
+        | kind (FUNTY (args, result)) =
+            let fun badKind tau = not (eqKind (kind tau, TYPE))
+            in  if badKind result then
+                  raise TypeError "function result is not a type"
+                else if List.exists badKind args then
+                  raise TypeError "argument list includes a non-type"
+                else
+                  TYPE
+            end
+      (* definition of internal function [[kind]] 388d *)
+        | kind (CONAPP (tau, actuals)) =
+            (case kind tau
+               of ARROW (formal_kinds, result_kind) =>
+                    if eqKinds (formal_kinds, map kind actuals) then
+                        result_kind
+                    else
+                        raise TypeError ("type constructor " ^ typeString tau ^
+                                         " applied to the wrong arguments")
+                | TYPE =>
+                    raise TypeError ("tried to apply type " ^ typeString tau ^
+                                     " as type constructor"))
+      (* definition of internal function [[kind]] 389a *)
+        | kind (FORALL (alphas, tau)) =
+            let val Delta' =
+                  foldl (fn (a, Delta) => bind (a, TYPE, Delta)) Delta alphas
+            in  case kindof (tau, Delta')
+                  of TYPE    => TYPE
+                   | ARROW _ =>
+                       raise TypeError
+                                      "quantifed a non-nullary type constructor"
+            end *)
+
 (* let kind = ["string" ] *)
 
 let rec def_to_string = function 
