@@ -100,7 +100,7 @@ type tyscheme = FORALL of string list * ty
 *)
 
 (* Type or type in waiting *)
-type kind = TYPE | INWAITING (kind list * kind)
+type kind = TYPE | INWAITING of (kind list * kind)
 
 let initial_delta = [("int", TYPE); ("bool", TYPE); ("string", TYPE); 
                         ("list", INWAITING ([TYPE], TYPE));]
