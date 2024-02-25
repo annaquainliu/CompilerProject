@@ -138,50 +138,6 @@ let kindof tau Delta =
     in kind tau *)
     
 
-(* fun kindof (tau, Delta) =
-  let (* definition of internal function [[kind]] 388a *)
-      fun kind (TYVAR a) =
-            (find (a, Delta)
-             handle NotFound _ => raise TypeError ("unknown type variable " ^ a)
-                                                                               )
-      (* definition of internal function [[kind]] 388b *)
-        | kind (TYCON c) =
-            (find (c, Delta)
-             handle NotFound _ => raise TypeError ("unknown type constructor " ^
-                                                                             c))
-      (* definition of internal function [[kind]] 388c *)
-        | kind (FUNTY (args, result)) =
-            let fun badKind tau = not (eqKind (kind tau, TYPE))
-            in  if badKind result then
-                  raise TypeError "function result is not a type"
-                else if List.exists badKind args then
-                  raise TypeError "argument list includes a non-type"
-                else
-                  TYPE
-            end
-      (* definition of internal function [[kind]] 388d *)
-        | kind (CONAPP (tau, actuals)) =
-            (case kind tau
-               of ARROW (formal_kinds, result_kind) =>
-                    if eqKinds (formal_kinds, map kind actuals) then
-                        result_kind
-                    else
-                        raise TypeError ("type constructor " ^ typeString tau ^
-                                         " applied to the wrong arguments")
-                | TYPE =>
-                    raise TypeError ("tried to apply type " ^ typeString tau ^
-                                     " as type constructor"))
-      (* definition of internal function [[kind]] 389a *)
-        | kind (FORALL (alphas, tau)) =
-            let val Delta' =
-                  foldl (fn (a, Delta) => bind (a, TYPE, Delta)) Delta alphas
-            in  case kindof (tau, Delta')
-                  of TYPE    => TYPE
-                   | ARROW _ =>
-                       raise TypeError
-                                      "quantifed a non-nullary type constructor"
-            end *)
-
 (* let kind = ["string" ] *)
 
 let rec def_to_string = function 
