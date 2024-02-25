@@ -217,4 +217,6 @@ function pattern_exhaustive(user_patterns, to_match) {
  * []
  */
 // let user_patterns = [new ConPattern("CONS", [new Generic(), new Generic()]), new ConPattern("CONS", [new Generic(), new Generic()]), new ConPattern("NIL", [])]
+
+
 // console.log(validate_pattern(user_patterns));
