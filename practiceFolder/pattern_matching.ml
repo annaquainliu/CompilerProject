@@ -57,31 +57,31 @@ let starts_generic list = match list with
        Takes in (pattern list) list -> bool
     *)
 let break_down_patterns = function 
-      | []        -> true 
-      | user_list -> 
+    | []        -> true 
+    | user_list -> 
         let starts_gen = List.all starts_generic user_list in 
-        if starts_gen
-        then break_down_patterns (List.map List.tail user_list)
-        else validate_patterns user_list 
+            if starts_gen
+            then break_down_patterns (List.map List.tl user_list)
+            else validate_patterns user_list 
 
 let pattern_exhaust user_patterns to_match = 
     match user_patterns, to_match with 
-      | x::xs, [] -> raise Pattern_Matching_Excessive
-      | [], x::xs -> raise Pattern_Matching_Not_Exhaustive
-      | [], [] -> true
-      | (_, m::ms) -> 
+        | x::xs, [] -> raise Pattern_Matching_Excessive
+        | [], x::xs -> raise Pattern_Matching_Not_Exhaustive
+        | [], [] -> true
+        | (_, m::ms) -> 
         match List.filter (matched_pattern m) user_patterns with 
-          | []      -> raise Pattern_Matching_Not_Exhaustive
-          | matches ->  if (List.length matches) > 1 && List.all all_generic_matches matches
-                        then raise Pattern_Matching_Excessive
-                        else  let _ = break_down_patterns (fun -> function 
-                                                            | CONPATTERN (name, list) -> list 
-                                                            | _ -> raise Ill_Pattern)
-                                                          matches
-                              in pattern_exhaust 
-                                (List.filter (fun p -> (not (matched_pattern m p))) user_patterns) 
-                                ms
+            | []      -> raise Pattern_Matching_Not_Exhaustive
+            | matches -> 
+                if (List.length matches) > 1 && List.all all_generic_matches matches
+                then raise Pattern_Matching_Excessive
+                else 
+                let _ = break_down_patterns 
+                        (fun -> function 
+                                | CONPATTERN (name, list) -> list 
+                                | _ -> raise Ill_Pattern)
+                        matches
+                in pattern_exhaust 
+                    (List.filter (fun p -> (not (matched_pattern m p))) user_patterns) 
+                    ms
                             
-
-
-  
