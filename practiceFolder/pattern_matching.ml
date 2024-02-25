@@ -16,7 +16,17 @@ let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]
 let int_patterns = [(PATTERN ("INT", [])); GENERIC]
 let bool_patterns = [(PATTERN ("BOOL", [])); GENERIC]
 let string_patterns = [(PATTERN ("STRING", [])); GENERIC]
+let poo_patterns = [PATTERN ("TOILET", [GENERIC])]
+let poo_other_patterns = [PATTERN ("PEE", []); PATTERN ("POO", []); PATTERN ("DIHREAH")]
 
+(* 
+   datatype excrement = POO | PEE | DIH
+   datatype toilet = TOILET of excrement * excrement * excrement
+
+   USER PATTERNS =
+   [TOILET(POO, DIH, PEE), TOILET(DIH, POO, DIH), TOILET(PEE, PEE, POO)]
+
+*)
 
 exception Pattern_Matching_Not_Exhaustive of string 
 exception Pattern_Matching_Excessive of string
@@ -165,6 +175,7 @@ and pattern_exhaust user_patterns to_match =
    "hi"::xs
    x::xs
    []
+
    pass
 *)
 (* let user_patterns = [PATTERN ("CONS", [PATTERN ("STRING", []); GENERIC]); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN ("NIL", [])] *)
@@ -177,6 +188,8 @@ and pattern_exhaust user_patterns to_match =
    fail
 *)
 (* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN ("CONS", [PATTERN ("STRING", []); GENERIC]); PATTERN ("NIL", [])] *)
+
+
 
 
 let _ = validate_patterns user_patterns
