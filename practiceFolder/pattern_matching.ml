@@ -16,28 +16,28 @@ let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]
 let int_patterns = [(PATTERN ("VAR", [GENERIC])); (PATTERN ("VAL", []))]
 exception Pattern_Matching_Not_Exhaustive of string 
 exception Pattern_Matching_Excessive of string
-exception Ill_Pattern
+exception Ill_Pattern of string 
 (* 
   Environment association list of names to list of constructors
 *)
 let datatypes = [("list", list_patterns); ("int", int_patterns)]
 
-(* 
-   Determines if the list of user_patterns is exhaustive, excessive, or good
-*)
-   let matched_pattern p p' = match p, p' with 
+let matched_pattern p p' = match p, p' with 
    | (PATTERN (name, _)), (PATTERN (name', _)) -> name = name' 
-   | _ -> raise Ill_Pattern
+   |  _, GENERIC -> true
+   | _ -> raise (Ill_Pattern "to matched pattern p cannot be generic")
 
-let all_generic_matches = 
-     (fun p -> match p with  
-         | PATTERN (name, list) -> 
-               List.for_all 
-                 (fun p -> match p with  
-                     | GENERIC -> true 
-                     | _ -> false) 
-                 list
-         | _ -> false)
+let is_generic = function 
+        | GENERIC -> true 
+        | _ -> false
+    
+let all_generic_matches = function  
+         | PATTERN (name, list) -> List.for_all is_generic list
+         | _ -> false
+
+let get_list = function 
+        | PATTERN (name, list) -> list 
+        | _  -> raise (Ill_Pattern "Cannot get list of a non-pattern")
 (*
      Determines whether a list's first element is generic
 *)
@@ -58,15 +58,17 @@ let rec break_down_patterns user_list = match user_list with
                 then true 
                 else if List.for_all starts_generic user_list
                     then break_down_patterns (List.map List.tl user_list)
-                    else let _ = print_endline ("validating with patterns " ^ (list_to_string pattern_to_string (List.map List.hd user_list))) in 
-                        let _ = validate_patterns (List.map List.hd user_list) in 
+                    else let _ = validate_patterns (List.map List.hd user_list) in 
                                 break_down_patterns (List.map List.tl user_list)
 
+(* 
+   Determines if the list of user_patterns is exhaustive, excessive, or good
+*)
 and validate_patterns ps = match ps with 
     | []                       -> true 
     | (PATTERN (name, _))::_  -> 
             let rec find_pattern env = match env with 
-                | [] -> raise Ill_Pattern
+                | [] -> raise (Ill_Pattern "validate_patterns base case")
                 | (_, constructors)::rest -> if List.exists 
                                             (fun p -> match p with 
                                                 | (PATTERN (name', _)) -> name = name'
@@ -75,7 +77,7 @@ and validate_patterns ps = match ps with
                                         then constructors  
                                         else find_pattern rest
             in pattern_exhaust ps (find_pattern datatypes)
-        | _ -> raise Ill_Pattern
+        | _ -> raise (Ill_Pattern "validate_patterns")
 
 and pattern_exhaust user_patterns to_match = 
     match user_patterns, to_match with 
@@ -86,22 +88,39 @@ and pattern_exhaust user_patterns to_match =
         match List.filter (matched_pattern m) user_patterns with 
             | []      -> raise (Pattern_Matching_Not_Exhaustive "base case 3")
             | matches -> 
-                if (List.length matches) > 1 && List.for_all all_generic_matches matches
+                if (List.length matches) > 1 && 
+                    (List.for_all all_generic_matches matches || List.for_all is_generic matches)
                 then raise (Pattern_Matching_Excessive "base case 4")
                 else 
-                let list_patterns = (List.map
-                                        (fun p -> match p with 
-                                                | PATTERN (name, list) -> list 
-                                                | _ -> raise Ill_Pattern)
-                                        matches) 
-                in
-                let _ = print_endline ("to match: " ^ list_to_string pattern_to_string to_match) in
-                let _ = print_endline ("breaking down matches: " ^ list_to_string pattern_to_string matches) in 
-                let _ = break_down_patterns list_patterns
+                if (List.exists is_generic matches) 
+                then true
+                else 
+                let _ = break_down_patterns (List.map get_list matches) 
                 in pattern_exhaust 
                     (List.filter (fun p -> (not (matched_pattern m p))) user_patterns) 
                     ms 
                             
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])] *)
-let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]); PATTERN ("NIL", []);]
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]); PATTERN ("NIL", []);] *)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC])] *)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC])] *)
+(* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN("NIL", [])] *)
+(* let user_patterns = [PATTERN ("NIL", [])] *)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN("NIL", [])] *)
+
+(* let user_patterns = [PATTERN ("NIL", []); GENERIC] *)
+
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); GENERIC] *)
+(* 
+   x::[]
+   x::xs
+   []
+*)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])] *)
+(* 
+   x::ys
+   ys
+*)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); GENERIC] *)
+
 let _ = validate_patterns user_patterns
