@@ -93,8 +93,7 @@ and pattern_exhaust user_patterns to_match =
         match List.filter (matched_pattern m) user_patterns with 
             | []      -> raise (Pattern_Matching_Not_Exhaustive "base case 3")
             | matches -> 
-                if (List.length matches) > 1 && 
-                    (List.for_all all_generic_matches matches || List.for_all is_generic matches)
+                if (List.length matches) > 1 && (List.for_all all_generic_matches matches)
                 then raise (Pattern_Matching_Excessive "base case 4")
                 else 
                 if (List.exists is_generic matches) 
