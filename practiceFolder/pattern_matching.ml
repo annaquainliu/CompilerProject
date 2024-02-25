@@ -122,7 +122,7 @@ and pattern_exhaust user_patterns to_match =
 
    should pass
 *)
-let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN("NIL", [])]
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN("NIL", [])] *)
 
 (*
    
