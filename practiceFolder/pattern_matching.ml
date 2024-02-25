@@ -13,14 +13,18 @@ let rec pattern_to_string = function
     | PATTERN (name, list) -> name ^ "(" ^ list_to_string pattern_to_string list ^ ")"
 
 let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]))]
-let int_patterns = [(PATTERN ("VAR", [GENERIC])); (PATTERN ("VAL", []))]
+let int_patterns = [(PATTERN ("INT", []))]
+let bool_patterns = [(PATTERN ("BOOL", []))]
+let string_patterns = [(PATTERN ("STRING", []))]
+
+
 exception Pattern_Matching_Not_Exhaustive of string 
 exception Pattern_Matching_Excessive of string
 exception Ill_Pattern of string 
 (* 
   Environment association list of names to list of constructors
 *)
-let datatypes = [("list", list_patterns); ("int", int_patterns)]
+let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns)]
 
 let matched_pattern p p' = match p, p' with 
    | (PATTERN (name, _)), (PATTERN (name', _)) -> name = name' 
@@ -66,6 +70,8 @@ let rec break_down_patterns user_list = match user_list with
 *)
 and validate_patterns ps = match ps with 
     | []                       -> true 
+    | [GENERIC]                -> true 
+    |  GENERIC::xs -> raise (Pattern_Matching_Excessive "Generic case before other cases")
     | (PATTERN (name, _))::_  -> 
             let rec find_pattern env = match env with 
                 | [] -> raise (Ill_Pattern "validate_patterns base case")
@@ -77,7 +83,6 @@ and validate_patterns ps = match ps with
                                         then constructors  
                                         else find_pattern rest
             in pattern_exhaust ps (find_pattern datatypes)
-        | _ -> raise (Ill_Pattern "validate_patterns")
 
 and pattern_exhaust user_patterns to_match = 
     match user_patterns, to_match with 
@@ -99,14 +104,35 @@ and pattern_exhaust user_patterns to_match =
                 in pattern_exhaust 
                     (List.filter (fun p -> (not (matched_pattern m p))) user_patterns) 
                     ms 
-                            
+(*
+    UNIT TESTS!
+*)
+
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])] *)
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]); PATTERN ("NIL", []);] *)
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC])] *)
 (* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC])] *)
 (* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN("NIL", [])] *)
 (* let user_patterns = [PATTERN ("NIL", [])] *)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN("NIL", [])] *)
+
+(* 
+   X::Y::YS
+   Y::YS
+   []
+
+   should pass
+*)
+let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN("NIL", [])]
+
+(*
+   
+    Y::YS
+    X::Y::YS
+    []
+
+    should not pass
+*)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]);  PATTERN("NIL", [])] *)
 
 (* let user_patterns = [PATTERN ("NIL", []); GENERIC] *)
 
