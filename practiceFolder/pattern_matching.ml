@@ -13,9 +13,9 @@ let rec pattern_to_string = function
     | PATTERN (name, list) -> name ^ "(" ^ list_to_string pattern_to_string list ^ ")"
 
 let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]))]
-let int_patterns = [(PATTERN ("INT", []))]
-let bool_patterns = [(PATTERN ("BOOL", []))]
-let string_patterns = [(PATTERN ("STRING", []))]
+let int_patterns = [(PATTERN ("INT", [])); GENERIC]
+let bool_patterns = [(PATTERN ("BOOL", [])); GENERIC]
+let string_patterns = [(PATTERN ("STRING", [])); GENERIC]
 
 
 exception Pattern_Matching_Not_Exhaustive of string 
@@ -107,7 +107,21 @@ and pattern_exhaust user_patterns to_match =
 *)
 
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])] *)
+(* 
+   x::y::zs
+   z::[]
+   []
+
+   should pass
+*)
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]); PATTERN ("NIL", []);] *)
+
+(* 
+   same as above but diff order, so should pass
+*)
+(* let user_patterns = [PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]);  PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("NIL", []);] *)
+(* let user_patterns = [PATTERN ("NIL", []); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]);  PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); ] *)
+
 (* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC])] *)
 (* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC])] *)
 (* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN("NIL", [])] *)
@@ -145,6 +159,24 @@ and pattern_exhaust user_patterns to_match =
    x::ys
    ys
 *)
-let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); GENERIC]
+(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); GENERIC] *)
+
+(* 
+   "hi"::xs
+   x::xs
+   []
+   pass
+*)
+(* let user_patterns = [PATTERN ("CONS", [PATTERN ("STRING", []); GENERIC]); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN ("NIL", [])] *)
+
+(* 
+    X::XS
+   "hi"::xs
+   []
+
+   fail
+*)
+(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN ("CONS", [PATTERN ("STRING", []); GENERIC]); PATTERN ("NIL", [])] *)
+
 
 let _ = validate_patterns user_patterns
