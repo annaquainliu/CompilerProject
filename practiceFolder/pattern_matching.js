@@ -59,6 +59,7 @@ function all (p, xs) {
 }
 
 let list_constructors = [new ConPattern("NIL", []), new ConPattern("CONS", [new Generic(), new Generic()])]
+
 let datatype_env = {"list" : list_constructors};
 
 function deepCopy(list) {
@@ -101,6 +102,7 @@ function listOfPatternsToString(list) {
  *                      CONPATTERN("CONS", [GENERIC("X"), CONPATTERN("NIL", [])]),
  *                      CONPATTERN("NIL", [])]
  * 
+ * 
  * to_match = [CONPATTERN("CONS", [GENERIC, GENERIC]), CONPATTERN("NIL", [])]
  * 
  * @param {List<Pattern>} user_patterns 
@@ -125,15 +127,18 @@ function pattern_exhaustive(user_patterns, to_match) {
         }
     }
     if (matched_patterns.length == 0) {
-        throw new Error("Non-Exhaustive pattern matching asdsa");
+        throw new Error("Non-Exhaustive pattern matching");
     }
     // list_to_match = [GENERIC, GENERIC]
     let list_to_match = first_pattern.list;
 
-    if (list_to_match.length == 0 && matched_patterns.length > 1) {
+    if (matched_patterns.length > 1 && all(p => all(inner_p => inner_p instanceof Generic, p.list), matched_patterns)) {
         throw new Error("Excessive pattern matching")
     }
     // for every single generic in list_to_match
+    // to do: can be generalized 
+    // [PATTERN("CONS", [GENERIC, PATTERN("CONS", [GENERIC, GENERIC])]), PATTERN("CONS", [GEN, NIL])]
+    //
     for (let i = 0; i < list_to_match.length; i++) {
         console.log("current to match pattern is ", list_to_match[i].toString());
         for (let j = 0; j < matched_patterns.length; j++) {
