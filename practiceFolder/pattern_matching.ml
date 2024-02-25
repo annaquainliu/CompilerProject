@@ -28,7 +28,7 @@ let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_pa
 
 let matched_pattern p p' = match p, p' with 
    | (PATTERN (name, _)), (PATTERN (name', _)) -> name = name' 
-   |  _, GENERIC -> true
+   |  _, GENERIC -> false
    | _ -> raise (Ill_Pattern "to matched pattern p cannot be generic")
 
 let is_generic = function 
@@ -86,23 +86,22 @@ and validate_patterns ps = match ps with
 
 and pattern_exhaust user_patterns to_match = 
     match user_patterns, to_match with 
+        | [GENERIC], x::xs -> true
         | x::xs, [] -> raise (Pattern_Matching_Excessive "base case 1")
         | [], x::xs -> raise (Pattern_Matching_Not_Exhaustive "base case 2")
         | [], [] -> true
-        | (_, m::ms) -> 
-        match List.filter (matched_pattern m) user_patterns with 
-            | []      -> raise (Pattern_Matching_Not_Exhaustive "base case 3")
-            | matches -> 
+        | (m::ms, _) -> match List.filter (matched_pattern m) to_match with 
+            | []      -> raise (Pattern_Matching_Excessive "base case 3")
+            | [pattern] -> 
+                let matches = List.filter (matched_pattern pattern) user_patterns in 
                 if (List.length matches) > 1 && (List.for_all all_generic_matches matches)
                 then raise (Pattern_Matching_Excessive "base case 4")
                 else 
-                if (List.exists is_generic matches) 
-                then true
-                else 
                 let _ = break_down_patterns (List.map get_list matches) 
                 in pattern_exhaust 
-                    (List.filter (fun p -> (not (matched_pattern m p))) user_patterns) 
-                    ms 
+                    (List.filter (fun p -> (not (matched_pattern pattern p))) user_patterns) 
+                    (List.filter (fun p -> (not (matched_pattern pattern p))) to_match)
+            | _  -> raise (Ill_Pattern "Constructors are not distinct names")
 (*
     UNIT TESTS!
 *)
@@ -146,6 +145,6 @@ and pattern_exhaust user_patterns to_match =
    x::ys
    ys
 *)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); GENERIC] *)
+let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); GENERIC]
 
 let _ = validate_patterns user_patterns
