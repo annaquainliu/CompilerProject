@@ -40,8 +40,10 @@ let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_pa
 let get_list = function 
         | PATTERN (name, list) -> list 
         | _  -> raise (Ill_Pattern "Cannot get list of a non-pattern")
-
-let rec  pattern_covers m m' = match m, m' with
+(* 
+    returns true if m covers m', and false otherwise
+*)
+let rec pattern_covers m m' = match m, m' with
             | GENERIC, _       -> true
             | (PATTERN (name, list)), (PATTERN (name', list')) ->
                 name = name' && (double_list_all list list')
@@ -52,16 +54,14 @@ and double_list_all list list' =
         | (x::xs), (y::ys) -> (pattern_covers x y) && double_list_all xs ys
         | _   -> raise (Ill_Pattern "ill formed constructors")
 (* 
-    returns true if m covers m', and false otherwise
-*)
-(* 
    Given a list of user patterns, and the cartesian product to_match 
    (exhaustive set)
    the most specific pattern, returns true if ps exhuasts the
    product, and false otherwise
 *)
 let rec pattern_exhaust user_patterns to_match =
-        match exhausted_patterns user_patterns to_match with 
+    let simplified = simplify_user_patterns user_patterns in 
+        match exhausted_patterns simplified to_match with 
             |  [],    [] -> true 
             |  x::xs, [] -> raise Pattern_Matching_Excessive 
             |  [], x::xs -> raise Pattern_Matching_Not_Exhaustive
@@ -83,35 +83,42 @@ and exhausted_patterns user_patterns to_match = match user_patterns with
                         else exhausted_patterns ps remaining
 
 (* 
-   Runs pattern_exhaust on one pattern and every pattern in 
+   Runs pattern_exhaust between one pattern and every pattern in 
    to compute the remaining set
 
     pattern -> (pattern list) -> (pattern list)
 *)
 and break_down_patterns to_match pattern =
-    match pattern with 
-        (* List.fold_left: ('acc -> 'a -> 'acc) -> 'acc -> 'a list -> 'acc *)
-        | (PATTERN _) -> 
-            let rec break_down = function 
-                | [] -> []
-                | (p::ps) ->  
-                    if (pattern_covers pattern p)
-                    then break_down ps
-                    else p::break_down ps
-            in break_down to_match 
-        | GENERIC -> [] 
+    let rec break_down = function 
+        | [] -> []
+        | (p::ps) ->  
+            if (pattern_covers pattern p)
+            then break_down ps
+            else p::break_down ps
+    in break_down to_match 
+(* 
+   Given a list of user patterns, removes cases that are more specific
+   than later cases (or less general than cases afterwards.)
+
+   * Note: Order matters. Given pattern_i, we can only remove pattern_j,
+   where 0 <= j < i.
+
+   simplify_user_patterns: (pattern list) -> (pattern list)
+*)
+   (* ('acc -> 'a -> 'acc) -> 'acc -> 'a list -> 'acc *)
+
+   (* [nil; (cons GENERIC GENERIC); (cons GENERIC nil)] *)
+
+and simplify_user_patterns ps =  
+    let rec simplify = function 
+        | []    -> []
+        | x::xs -> List.append (List.filter (pattern_covers x) xs) (simplify xs)
+    in 
+    let redundant = simplify (List.rev ps) in 
+    List.filter (fun p -> not (List.exists (fun p' -> p' = p) redundant)) ps
 
 (*  UNIT TESTS *)
 (* tests that SHOULD pass: *)
-
-(* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [PATTERN ("NIL", []); GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])])]
-let product = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] *)
-
-(* let user_patterns = [PATTERN ("NIL", [])]
-let product = [nil; (cons GENERIC GENERIC)] *)
-
-(* let user_patterns = [(cons GENERIC GENERIC)]
-let product = [nil; (cons GENERIC GENERIC)] *)
 
 (* let user_patterns = [(cons GENERIC GENERIC); nil]
 let product =  [(cons GENERIC GENERIC); nil] *)
@@ -123,16 +130,32 @@ let product = [(cons GENERIC GENERIC); nil] *)
 let product = [(cons GENERIC GENERIC); nil] *)
 
 (* let user_patterns = [(cons GENERIC nil); (cons GENERIC GENERIC); nil]
-let product = [nil; (cons GENERIC GENERIC);] *)
+let product = [nil; (cons GENERIC GENERIC);]  *)
 
 (* tests that should fail: *)
+
+(* let user_patterns = [PATTERN ("NIL", [])]
+let product = [nil; (cons GENERIC GENERIC)] *)
 
 (* let user_patterns = [GENERIC; nil]
 let product = [(cons GENERIC GENERIC); nil] *)
 
-let user_patterns = [(cons GENERIC nil); nil]
-let product = [nil]
+(* let user_patterns = [(cons GENERIC GENERIC); (cons GENERIC nil); nil]
+let product = [(cons GENERIC GENERIC); nil] *)
+
+(* let user_patterns = [(cons GENERIC GENERIC)]
+let product = [nil; (cons GENERIC GENERIC)] *)
+
+(* 
+   []
+   []::ys
+   ys::[]
+*)
+let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [PATTERN ("NIL", []); GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])])]
+let product = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] 
 
 
-(* let _ = print_endline (string_of_bool (pattern_covers (cons GENERIC nil) nil)) *)
+(* let _ = print_endline (list_to_string pattern_to_string (simplify_user_patterns user_patterns)) *)
+(* 
+let _ = print_endline (string_of_bool (pattern_covers (cons GENERIC nil) (cons GENERIC GENERIC))) *)
 let _ = print_endline (string_of_bool (pattern_exhaust user_patterns product))
