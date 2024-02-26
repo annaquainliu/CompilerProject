@@ -37,6 +37,8 @@ let excrement_patterns = [(PATTERN ("POO", [])); (PATTERN ("PEE", []))]
 let toilet_patterns = [(PATTERN ("TOILET", [GENERIC; GENERIC;]))]
 
 let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns)]
+let Gamma = [("TOILET", )]
+
 
 let get_list = function 
         | PATTERN (name, list) -> list 
@@ -118,6 +120,10 @@ and simplify_user_patterns ps =
     let redundant = simplify (List.rev ps) in 
     List.filter (fun p -> not (List.exists (fun p' -> p' = p) redundant)) ps
 
+(* 
+    Computing cartesian product
+*)
+
 (*  UNIT TESTS *)
 (* tests that SHOULD pass: *)
 
@@ -177,4 +183,4 @@ let product = [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])]); P
 (* let _ = print_endline (list_to_string pattern_to_string (simplify_user_patterns user_patterns)) *)
 (* 
 let _ = print_endline (string_of_bool (pattern_covers (cons GENERIC nil) (cons GENERIC GENERIC))) *)
-let _ = print_endline (string_of_bool (pattern_exhaust user_patterns product))
+(* let _ = print_endline (string_of_bool (pattern_exhaust user_patterns product)) *)

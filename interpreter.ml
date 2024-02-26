@@ -89,57 +89,6 @@ let funtype (args, result) =
 
 type tyscheme = FORALL of string list * ty
 
-
-(*
-    Kind Environment:
-
-    Mapping of names to kinds.
-
-    Every time a user create a valid datatype, the datatype will
-    be added to the kind environment.
-*)
-
-(* Type or type in waiting *)
-type kind = TYPE | INWAITING of (kind list * kind)
-
-let initial_delta = [("int", TYPE); ("bool", TYPE); ("string", TYPE); 
-                        ("list", INWAITING ([TYPE], TYPE));]
-(* 
-let kindof tau Delta = 
-    let eqKind x y = 
-       (match x, y with
-            | TYPE, TYPE -> true
-            | (INWAITING (kinds, kind), INWAITING (kinds', kind')) ->  
-                eqKinds kinds kinds' && eqKind kind kind'
-            | _ -> false)
-    and eqKinds xs ys =
-        match xs, ys with 
-            | ([], []) -> true 
-            | (kind::kinds, kind'::kinds') -> eqKind kind kind' && eqKinds kinds kinds' 
-            | _ -> false
-    let badkind = (fun tau -> (kind tau) <> TYPE)
-    let kind = match tau with 
-                | (TYVAR a) -> lookup a Delta
-                | (TYCON c) -> lookup c Delta
-                | (CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args)], result)) -> 
-                    match kind result with 
-                        | TYPE -> if List.exists badkind args 
-                                  then raise (KindError "Argument gave kind error")
-                                  else TYPE
-                        | _ -> raise (KindError "") 
-                | (CONAPP (TYCON "tuple", [taus])) -> 
-                    if List.exists badkind taus 
-                    then raise (KindError "Tuple argument gave kind error")
-                    else TYPE
-                | (CONAPP (tau, taus)) -> 
-                    match kind tau with 
-                        | (INWAITING (kinds, kind)) -> 
-                            let conapp_kinds = map kind 
-    in kind tau *)
-    
-
-(* let kind = ["string" ] *)
-
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
