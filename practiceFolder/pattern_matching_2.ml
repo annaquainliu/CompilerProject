@@ -33,7 +33,8 @@ let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]
 let int_patterns = [(PATTERN ("INT", [])); GENERIC]
 let bool_patterns = [(PATTERN ("BOOL", [])); GENERIC]
 let string_patterns = [(PATTERN ("STRING", [])); GENERIC]
-
+let excrement_patterns = [(PATTERN ("POO", [])); (PATTERN ("PEE", []))]
+let toilet_patterns = [(PATTERN ("TOILET", [GENERIC; GENERIC;]))]
 
 let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns)]
 
@@ -132,6 +133,17 @@ let product = [(cons GENERIC GENERIC); nil] *)
 (* let user_patterns = [(cons GENERIC nil); (cons GENERIC GENERIC); nil]
 let product = [nil; (cons GENERIC GENERIC);]  *)
 
+(* 
+   []
+   []::ys
+   ys::[]
+   xs
+*)
+(* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [PATTERN ("NIL", []); GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])]); GENERIC]
+let product = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)]  *)
+
+(* let user_patterns = [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])]);]
+let product = [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])]);] *)
 (* tests that should fail: *)
 
 (* let user_patterns = [PATTERN ("NIL", [])]
@@ -151,10 +163,17 @@ let product = [nil; (cons GENERIC GENERIC)] *)
    []::ys
    ys::[]
 *)
-let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [PATTERN ("NIL", []); GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])])]
-let product = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] 
+(* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [PATTERN ("NIL", []); GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])])]
+let product = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)]  *)
 
+(* 
+   TOILET (XS, YS)  ->
+   TOILET (POO, PEE) ->
 
+    excessive
+*)
+(* let user_patterns = [PATTERN ("TOILET", [GENERIC; GENERIC]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]
+let product = [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])]);] *)
 (* let _ = print_endline (list_to_string pattern_to_string (simplify_user_patterns user_patterns)) *)
 (* 
 let _ = print_endline (string_of_bool (pattern_covers (cons GENERIC nil) (cons GENERIC GENERIC))) *)
