@@ -70,6 +70,39 @@ function deepCopy(list) {
     return copy;
 }
 
+// function combine(input, currentList, k) {
+//     if (k == input.length) {
+//         let str = "";
+//         for (let i = 0; i < k; i++) {
+//             str += (currentList[i] + " ")
+//         }
+//         console.log(str);
+//     }
+//     else {
+//         for (let j = 0; j < input[k].length; j++) {
+//             currentList[k] = input[k][j];
+//             combine(input, currentList, k + 1);
+//         }
+//     }
+// }
+
+function combine(input, currentList, k, result) {
+    if (k == input.length) {
+        result.push(currentList)
+        return result;
+    }
+    else {
+        for (let j = 0; j < input[k].length; j++) {
+            currentList.push(input[k][j]);
+            combine(input, deepCopy(currentList), k + 1, result);
+            currentList.pop();
+        }
+    }
+    return result;
+}
+
+console.log(combine([[3, 4, 5], [1, 2], [5, 6, 7]], [], 0, []))
+
 
 // let user_patterns = [new ConPattern("CONS", [new Generic(), new ConPattern("CONS", [new Generic(), new Generic()])]), 
 //                        new ConPattern("CONS", [new Generic(), new ConPattern("NIL", [])]),

@@ -2,7 +2,49 @@ exception Pattern_Matching_Not_Exhaustive
 exception Pattern_Matching_Excessive 
 exception Ill_Pattern of string
 exception Ill_Typed
+exception Not_Found of string
 
+let rec lookup k = function 
+            | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
+            | ((k', v)::rest) -> if k' = k then v else lookup k rest
+
+type exp = LITERAL of value
+         | VAR of string 
+         | IF of exp * exp * exp
+         | APPLY of exp * exp list 
+         | LAMBDA of string list * exp
+         | LET of def list * exp
+and value =    STRING of string 
+            |  NUMBER of int
+            |  BOOLV  of bool
+            |  NIL
+            |  PAIR of value * value
+            |  CLOSURE of exp * (string * value) list
+            |  PRIMITIVE of (value list -> value)
+            | CONSTRUCTOR
+and def =  LETDEF of string * exp
+         | LETREC of string * exp 
+         | EXP of exp
+
+
+type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
+let intty = TYCON "int"
+let boolty = TYCON "bool"
+let strty = TYCON "string"
+let listty t = CONAPP(TYCON "list", [t])
+let tuple list = CONAPP (TYCON "tuple", list)
+let funtype (args, result) =
+  CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
+
+let get_fun_args = function 
+    | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
+        args
+    | _ -> raise Ill_Typed
+
+let get_fun_result = function 
+    | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
+        result
+    | _ -> raise Ill_Typed
 
 let list_to_string f xs = 
   let rec stringify = function 
@@ -13,6 +55,15 @@ let list_to_string f xs =
 
 type pattern = GENERIC
             |  PATTERN of string * (pattern list)
+
+
+let get_pattern_name = function 
+    | (PATTERN (name, list)) -> name 
+    | _ -> raise Ill_Typed
+
+let get_tycon_name = function 
+    | (TYCON name) -> name 
+    | _ -> raise Ill_Typed
 
 let is_generic = function 
             | GENERIC -> true 
@@ -36,9 +87,14 @@ let string_patterns = [(PATTERN ("STRING", [])); GENERIC]
 let excrement_patterns = [(PATTERN ("POO", [])); (PATTERN ("PEE", []))]
 let toilet_patterns = [(PATTERN ("TOILET", [GENERIC; GENERIC;]))]
 
-let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns)]
-let Gamma = [("TOILET", )]
+let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); ("toilet", toilet_patterns); ("excrement", excrement_patterns)]
 
+let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet")))]
+(* 
+    val hello = TOILET (POO, PEE, POO)
+    Gamma{ hello |--> TYCON ("toilet")}
+*)
+let rho = [("TOILET", CONSTRUCTOR)]
 
 let get_list = function 
         | PATTERN (name, list) -> list 
@@ -119,11 +175,43 @@ and simplify_user_patterns ps =
     in 
     let redundant = simplify (List.rev ps) in 
     List.filter (fun p -> not (List.exists (fun p' -> p' = p) redundant)) ps
-
 (* 
-    Computing cartesian product
-*)
+   Given a list of lists, compute the cartesian product
 
+    ('a list) list -> ('a list) list
+
+*)
+let rec cartesian_product input current_list result = 
+    match input with 
+        | []    -> current_list::result 
+        (* val fold_left : ('acc -> 'a -> 'acc) -> 'acc -> 'a list -> 'acc *)
+        | x::xs -> List.fold_left 
+                    (fun acc a -> cartesian_product xs (a::current_list) acc)
+                    result
+                    x
+(* 
+    Receives constructor names of the type with a constructor name
+    string -> (pattern list)
+*)
+let rec get_constructors name =
+    let tau = lookup name gamma in 
+    lookup (get_tycon_name (get_fun_result tau)) datatypes 
+(* 
+
+    Given a specific pattern, compute an exhaustive set of 
+    all the patterns
+
+    TOILET (GEN, PEE)
+    TOILET (PEE, GEN)
+
+*)
+(* let rec all_possible_patterns = function 
+    | PATTERN (name, list)  ->
+        
+    | GENERIC       -> raise (Ill_Pattern "cannot break down generic") *)
+
+let _ = print_endline (list_to_string pattern_to_string (all_possible_patterns (PATTERN ("toilet", [PATTERN ("excrement", []); PATTERN ("excrement", [])]))))
+   
 (*  UNIT TESTS *)
 (* tests that SHOULD pass: *)
 
@@ -146,6 +234,13 @@ let product = [nil; (cons GENERIC GENERIC);]  *)
    xs
 *)
 (* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [PATTERN ("NIL", []); GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])]); GENERIC]
+
+[]
+[]::(x::xs)
+(x::xs)::[]
+[]::[]
+(x::xs)::(y::ys)
+
 let product = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)]  *)
 
 (* let user_patterns = [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])]); PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])]);]

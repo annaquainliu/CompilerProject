@@ -19,15 +19,6 @@ let string_patterns = [(PATTERN ("STRING", [])); GENERIC]
 let poo_patterns = [PATTERN ("TOILET", [GENERIC])]
 let poo_other_patterns = [PATTERN ("PEE", []); PATTERN ("POO", []); PATTERN ("DIHREAH")]
 
-(* 
-   datatype excrement = POO | PEE | DIH
-   datatype toilet = TOILET of excrement * excrement * excrement
-
-   USER PATTERNS =
-   [TOILET(POO, DIH, PEE), TOILET(DIH, POO, DIH), TOILET(PEE, PEE, POO)]
-
-*)
-
 exception Pattern_Matching_Not_Exhaustive of string 
 exception Pattern_Matching_Excessive of string
 exception Ill_Pattern of string 
