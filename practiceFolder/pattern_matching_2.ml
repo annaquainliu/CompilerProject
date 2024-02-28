@@ -89,7 +89,7 @@ let toilet_patterns = [(PATTERN ("TOILET", [GENERIC; GENERIC;]))]
 
 let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); ("toilet", toilet_patterns); ("excrement", excrement_patterns)]
 
-let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet")))]
+let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); ("PEE", (funtype ([], TYCON "excrement"))); ("POO", (funtype ([], TYCON "excrement")))]
 (* 
     val hello = TOILET (POO, PEE, POO)
     Gamma{ hello |--> TYCON ("toilet")}
@@ -198,19 +198,20 @@ let rec get_constructors name =
     lookup (get_tycon_name (get_fun_result tau)) datatypes 
 (* 
 
-    Given a specific pattern, compute an exhaustive set of 
-    all the patterns
-
-    TOILET (GEN, PEE)
-    TOILET (PEE, GEN)
-
+    Given a pattern, compute all the possible patterns
+    that would exhaust the type on the same level
+    of generality.
+    
+    pattern -> (pattern list)
 *)
-(* let rec all_possible_patterns = function 
-    | PATTERN (name, list)  ->
-        
-    | GENERIC       -> raise (Ill_Pattern "cannot break down generic") *)
+let rec all_possible_patterns = function 
+    | PATTERN (name, list) -> 
+        let constructors = List.filter (fun cons -> not ((get_pattern_name cons) = name)) (get_constructors name) in 
+        let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
+        List.append (List.map (fun list' -> PATTERN (name, list')) product) constructors
+    | GENERIC              -> [GENERIC]
 
-let _ = print_endline (list_to_string pattern_to_string (all_possible_patterns (PATTERN ("toilet", [PATTERN ("excrement", []); PATTERN ("excrement", [])]))))
+let _ = print_endline (list_to_string pattern_to_string (all_possible_patterns (PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])]))))
    
 (*  UNIT TESTS *)
 (* tests that SHOULD pass: *)
