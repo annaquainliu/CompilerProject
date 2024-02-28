@@ -233,7 +233,7 @@ let rec all_possible_patterns = function
     they are not exhaustive.
  *)
 let validate_patterns user_patterns = 
-    let simplified = simplify_user_patterns user_patterns in 
+    let simplified = simplify_user_patterns user_patterns in
     let product = List.fold_left (fun acc p -> List.append (all_possible_patterns p) acc) [] simplified in 
     let rec simplified_product = function 
         | [] -> []
@@ -258,7 +258,7 @@ let validate_patterns user_patterns =
    x::[]
    []
 *)
-(* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil)])) *)
+let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil)]))
 
 (* 
    []
@@ -276,6 +276,17 @@ let validate_patterns user_patterns =
    should be excessive!
 *)
 (* let _ = print_endline (string_of_bool (validate_patterns [(cons GENERIC GENERIC); (cons GENERIC nil); nil])) *)
+
+(* 
+    []::[]
+    x::xs
+    []
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns [(cons nil nil); (cons GENERIC GENERIC); nil])) *)
+
+(* let _ = print_endline (string_of_bool (validate_patterns 
+                                        [(PATTERN ("TOILET", [PATTERN ("POO", []); GENERIC])); 
+                                            (PATTERN ("TOILET", [PATTERN ("PEE", []); GENERIC])); (PATTERN ("TOILET", [GENERIC; GENERIC]))])) *)
 
 
 (* TESTING FOR ALL_POSSIBLE PATTERNS! *)
