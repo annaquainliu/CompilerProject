@@ -241,10 +241,42 @@ let validate_patterns user_patterns =
                    then simplified_product xs 
                    else x::simplified_product xs 
     in
+    let rec remove_general after before = match after, before with 
+        | [], _    -> []
+        | x::xs, _ -> if List.exists (pattern_covers x) (List.append before xs)
+                        then remove_general xs (x::before)
+                        else x::(remove_general xs (x::before))
+    in
     let good_product = simplified_product product in 
-    pattern_exhaust simplified good_product
+    let removed = remove_general good_product [] in
+    pattern_exhaust simplified removed
 
-let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))
+(* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])])) *)
+(* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC])])) *)
+(* 
+   x::(y::ys)
+   x::[]
+   []
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil)])) *)
+
+(* 
+   []
+   x::[]
+   x::xs
+
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC nil); (cons GENERIC GENERIC)])) *)
+
+(* 
+   x::xs
+   x::[]
+   []
+
+   should be excessive!
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns [(cons GENERIC GENERIC); (cons GENERIC nil); nil])) *)
+
 
 (* TESTING FOR ALL_POSSIBLE PATTERNS! *)
 (* let _ = print_endline (list_to_string pattern_to_string (all_possible_patterns (PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])))) *)
