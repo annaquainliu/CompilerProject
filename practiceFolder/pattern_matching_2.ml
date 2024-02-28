@@ -283,11 +283,15 @@ let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (co
     []
 *)
 (* let _ = print_endline (string_of_bool (validate_patterns [(cons nil nil); (cons GENERIC GENERIC); nil])) *)
-
-(* let _ = print_endline (string_of_bool (validate_patterns 
+(* 
+let _ = print_endline (string_of_bool (validate_patterns 
                                         [(PATTERN ("TOILET", [PATTERN ("POO", []); GENERIC])); 
                                             (PATTERN ("TOILET", [PATTERN ("PEE", []); GENERIC])); (PATTERN ("TOILET", [GENERIC; GENERIC]))])) *)
-
+(* let _ = print_endline (string_of_bool (validate_patterns
+                                        [(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("PEE", [])]));
+                                         (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("PEE", [])]));
+                                         (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
+                                         (PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))])) *)
 
 (* TESTING FOR ALL_POSSIBLE PATTERNS! *)
 (* let _ = print_endline (list_to_string pattern_to_string (all_possible_patterns (PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])))) *)
