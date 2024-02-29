@@ -93,10 +93,10 @@ let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]]
                 ("PEE", (funtype ([], TYCON "excrement"))); 
                 ("POO", (funtype ([], TYCON "excrement"))); 
                 ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
-                ("BYE", (funtype ([TYCON "int"], TYCON "hello")));
+                ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
                 ("NIL", (funtype ([], TYCON "list")));
                 ("CONS", (funtype ([TYVAR "'a"], TYCON "list")));
-                ("INT", (funtype ([TYCON "int"], TYCON "int")))]
+                ("INT", (funtype ([TYCON "int"], TYCON "int")));]
 (* 
     val hello = TOILET (POO, PEE, POO)
     Gamma{ hello |--> TYCON ("toilet")}
@@ -111,7 +111,7 @@ let rec double_list_all p list list' =
     match list, list' with 
         | [], [] -> true 
         | (x::xs), (y::ys) -> (p x y) && double_list_all p xs ys
-        | _   -> raise (Ill_Pattern "ill formed constructors")
+        | _   -> raise (Ill_Pattern ("ill formed constructors when comparing " ^ (list_to_string pattern_to_string list) ^ " " ^  (list_to_string pattern_to_string list')))
 
 let rec double_list_exists p list list' =
     match list, list' with 
@@ -168,7 +168,7 @@ let rec pattern_exhaust user_patterns to_match =
             |  [],    [] -> true 
             |  x::xs, [] -> raise Pattern_Matching_Excessive 
             |  [], x::xs -> raise Pattern_Matching_Not_Exhaustive
-            |  _         -> raise Pattern_Matching_Excessive 
+            |  _         -> raise Pattern_Matching_Not_Exhaustive
 (* 
    Returns a tuple of the remaining user_patterns and to_match patterns
 *)
@@ -248,7 +248,9 @@ let rec all_possible_patterns = function
 let validate_patterns user_patterns = 
     let most_specific = List.fold_left (fun acc p -> (if (more_specific p acc) then p else acc)) (List.hd user_patterns) (List.tl user_patterns) in 
     let product = all_possible_patterns most_specific in
-    pattern_exhaust user_patterns product
+    let new_product = List.fold_left (fun acc p -> (if (not (List.exists (equal_pattern p) product)) then p::acc else acc)) product user_patterns in
+    let _ = print_endline (list_to_string pattern_to_string new_product) in
+    pattern_exhaust user_patterns new_product
 
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))  *)
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC])])) *)
@@ -296,6 +298,23 @@ let validate_patterns user_patterns =
                                          (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
                                          (PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))])) *)
 (* 
+   GREET(BYE(TOILET (XS, YS)), ZS)
+   GREET(GREET(XS, YS), ZS)
+   GREET(XS, ZS)
+   BYE(TOILET(POO, PEE))
+   BYE(TOILET(PEE, POO))
+   BYE(TOILET(POO, POO))
+   BYE(TOILET(PEE, PEE))
+
+   ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
+    ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
+*)
+let _ = print_endline (string_of_bool (validate_patterns
+                                        [(PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+                                         (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
+                                         GENERIC
+                                        ]))
+(* 
    
 (x::xs)::(y::ys)
 []::[]
@@ -324,6 +343,11 @@ let validate_patterns user_patterns =
 *)
 (* let _ = print_endline (string_of_bool (validate_patterns
                                         [(cons (PATTERN ("INT", [])) GENERIC);
+                                         (cons GENERIC GENERIC);
+                                         nil])) *)
+
+(* let _ = print_endline (string_of_bool (validate_patterns
+                                        [(cons (PATTERN ("TOILET", [(PATTERN ("POO", [])); (PATTERN ("PEE", []))])) GENERIC);
                                          (cons GENERIC GENERIC);
                                          nil])) *)
 
