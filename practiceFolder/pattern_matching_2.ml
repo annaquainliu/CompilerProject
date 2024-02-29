@@ -112,14 +112,48 @@ let rec double_list_all p list list' =
         | [], [] -> true 
         | (x::xs), (y::ys) -> (p x y) && double_list_all p xs ys
         | _   -> raise (Ill_Pattern "ill formed constructors")
+
+let rec double_list_exists p list list' =
+    match list, list' with 
+        | [], [] -> false
+        | (x::xs), (y::ys) -> (p x y) || double_list_all p xs ys
+        | _   -> raise (Ill_Pattern "ill formed constructors")
 (* 
-    returns true if m covers m', and false otherwise
+    returns true if m covers m' (or is more general than m'), and false otherwise
+
+    Returns true if m encompasses m'
 *)
 let rec pattern_covers m m' = match m, m' with
             | GENERIC, _       -> true
             | (PATTERN (name, list)), (PATTERN (name', list')) ->
                 name = name' && (double_list_all pattern_covers list list')
             | _   -> false
+(*
+   Given two patterns, determines if m is more specific than m'
+
+    E.g. If m is more nested than m'.
+
+*)
+let rec more_specific m m' = match m, m' with 
+            | (PATTERN _, GENERIC) -> true
+            | (PATTERN (name, list)), (PATTERN (name', list')) ->
+                (* if (name = name')
+                then double_list_all more_specific list list'
+                else  *)
+                (match (list, list') with 
+                    | [], [] -> false (* equal specificness *)
+                    | [], _ -> (not (List.exists (fun a -> (not (is_generic a))) list'))
+                    | _, [] -> (not (List.exists (fun a -> (not (is_generic a))) list')) (* equal specificness *)
+                    | _     -> double_list_exists more_specific list list')
+            | _, _ -> false
+
+(* let _ = print_endline (string_of_bool (more_specific nil (cons nil nil))) *)
+(* let _ = print_endline (string_of_bool (more_specific (cons GENERIC GENERIC) nil)) *)
+(* let _ = print_endline (string_of_bool (more_specific (cons (cons GENERIC GENERIC) nil) nil)) *)
+(* let _ = print_endline (string_of_bool (more_specific (cons GENERIC nil) nil)) *)
+(* let _ = print_endline (string_of_bool (more_specific (cons (PATTERN ("INT", [])) GENERIC) (cons GENERIC GENERIC))) *)
+(* let _ = print_endline (string_of_bool (more_specific (cons (PATTERN ("INT", [])) GENERIC) nil)) *)
+(* let _ = print_endline (string_of_bool (more_specific GENERIC (cons GENERIC GENERIC))) *)
 
 let rec equal_pattern p p' = 
     match p, p' with 
@@ -169,26 +203,6 @@ and break_down_patterns to_match pattern =
             else p::break_down ps
     in break_down to_match 
 (* 
-   Given a list of user patterns, removes cases that are more specific
-   than later cases (or less general than cases afterwards.)
-
-   * Note: Order matters. Given pattern_i, we can only remove pattern_j,
-   where 0 <= j < i.
-
-   simplify_user_patterns: (pattern list) -> (pattern list)
-*)
-   (* ('acc -> 'a -> 'acc) -> 'acc -> 'a list -> 'acc *)
-
-   (* [nil; (cons GENERIC GENERIC); (cons GENERIC nil)] *)
-
-and simplify_user_patterns ps =  
-    let rec simplify = function 
-        | []    -> []
-        | x::xs -> List.append (List.filter (pattern_covers x) xs) (simplify xs)
-    in 
-    let redundant = simplify (List.rev ps) in 
-    List.filter (fun p -> not (List.exists (fun p' -> p' = p) redundant)) ps
-(* 
    Given a list of lists, compute the cartesian product
 
     ('a list) list -> ('a list) list
@@ -209,6 +223,7 @@ let rec cartesian_product input current_list result =
 let rec get_constructors name =
     let tau = lookup name gamma in 
     lookup (get_tycon_name (get_fun_result tau)) datatypes 
+
 (* 
 
     Given a pattern, compute all the possible patterns
@@ -225,6 +240,7 @@ let rec all_possible_patterns = function
                                                 | (PATTERN (name', _)) -> not (name = name'))
                                     (get_constructors name) in 
         let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
+
         List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
     | GENERIC              -> [GENERIC]
 
@@ -233,32 +249,20 @@ let rec all_possible_patterns = function
     they are not exhaustive.
  *)
 let validate_patterns user_patterns = 
-    let simplified = simplify_user_patterns user_patterns in
-    let product = List.fold_left (fun acc p -> List.append (all_possible_patterns p) acc) [] simplified in 
-    let rec simplified_product = function 
-        | [] -> []
-        | x::xs -> if List.exists (equal_pattern x) xs
-                   then simplified_product xs 
-                   else x::simplified_product xs 
-    in
-    let rec remove_general after before = match after, before with 
-        | [], _    -> []
-        | x::xs, _ -> if List.exists (pattern_covers x) (List.append before xs)
-                        then remove_general xs (x::before)
-                        else x::(remove_general xs (x::before))
-    in
-    let good_product = simplified_product product in 
-    let removed = remove_general good_product [] in
-    pattern_exhaust simplified removed
+    let most_specific = List.fold_left (fun acc p -> (if (more_specific p acc) then p else acc)) (List.hd user_patterns) (List.tl user_patterns) in 
+    let product = all_possible_patterns most_specific in
+    let _ = print_endline ("most specific " ^ pattern_to_string most_specific) in
+    let _ = print_endline ("product from most specific: " ^ list_to_string pattern_to_string product) in
+    pattern_exhaust user_patterns product
 
-(* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])])) *)
+(* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))  *)
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC])])) *)
 (* 
    x::(y::ys)
    x::[]
    []
 *)
-let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil)]))
+(* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil)])) *)
 
 (* 
    []
@@ -283,16 +287,47 @@ let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (co
     []
 *)
 (* let _ = print_endline (string_of_bool (validate_patterns [(cons nil nil); (cons GENERIC GENERIC); nil])) *)
+
 (* 
-let _ = print_endline (string_of_bool (validate_patterns 
+   TOILET (POO, GENERIC)
+   TOILET (PEE, GENERIC)
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns 
                                         [(PATTERN ("TOILET", [PATTERN ("POO", []); GENERIC])); 
-                                            (PATTERN ("TOILET", [PATTERN ("PEE", []); GENERIC])); (PATTERN ("TOILET", [GENERIC; GENERIC]))])) *)
+                                            (PATTERN ("TOILET", [PATTERN ("PEE", []); GENERIC]));])) *)
 (* let _ = print_endline (string_of_bool (validate_patterns
                                         [(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("PEE", [])]));
                                          (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("PEE", [])]));
                                          (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
                                          (PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))])) *)
-
+(* 
+   
+(x::xs)::(y::ys)
+[]::[]
+[]::xs
+(x::xs)::[]
+[]
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns 
+                                        [(cons (cons GENERIC GENERIC) (cons GENERIC GENERIC));
+                                         (cons nil nil);
+                                         (cons nil (cons GENERIC GENERIC));
+                                         (cons (cons GENERIC GENERIC) nil);
+                                         nil])) *)
+(* 
+   3::xs
+   []
+   Should NOT be exhaustive
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns
+                                        [(cons (PATTERN ("INT", [])) GENERIC);
+                                         nil])) *)
+(* 
+   Should NOT be exhaustive
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns
+                                         [(cons (PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])) GENERIC);
+                                          nil])) *)
 (* TESTING FOR ALL_POSSIBLE PATTERNS! *)
 (* let _ = print_endline (list_to_string pattern_to_string (all_possible_patterns (PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])))) *)
 (* let _ = print_endline (list_to_string pattern_to_string 
