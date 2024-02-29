@@ -251,8 +251,6 @@ let rec all_possible_patterns = function
 let validate_patterns user_patterns = 
     let most_specific = List.fold_left (fun acc p -> (if (more_specific p acc) then p else acc)) (List.hd user_patterns) (List.tl user_patterns) in 
     let product = all_possible_patterns most_specific in
-    let _ = print_endline ("most specific " ^ pattern_to_string most_specific) in
-    let _ = print_endline ("product from most specific: " ^ list_to_string pattern_to_string product) in
     pattern_exhaust user_patterns product
 
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))  *)
@@ -322,6 +320,16 @@ let validate_patterns user_patterns =
 (* let _ = print_endline (string_of_bool (validate_patterns
                                         [(cons (PATTERN ("INT", [])) GENERIC);
                                          nil])) *)
+(* 
+   3::xs
+   x::xs
+   []
+*)
+(* let _ = print_endline (string_of_bool (validate_patterns
+                                        [(cons (PATTERN ("INT", [])) GENERIC);
+                                         (cons GENERIC GENERIC);
+                                         nil])) *)
+
 (* 
    Should NOT be exhaustive
 *)
