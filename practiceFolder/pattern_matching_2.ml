@@ -137,9 +137,6 @@ let rec pattern_covers m m' = match m, m' with
 let rec more_specific m m' = match m, m' with 
             | (PATTERN _, GENERIC) -> true
             | (PATTERN (name, list)), (PATTERN (name', list')) ->
-                (* if (name = name')
-                then double_list_all more_specific list list'
-                else  *)
                 (match (list, list') with 
                     | [], [] -> false (* equal specificness *)
                     | [], _ -> (not (List.exists (fun a -> (not (is_generic a))) list'))
