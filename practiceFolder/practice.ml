@@ -58,3 +58,26 @@ let listToString f xs =
 
 let () = print_endline (listToString string_of_int [1;2;3;4])
 let () = print_endline (listToString (fun (a, b) -> "(" ^ a ^", "^ string_of_int b ^ ")") ["a", 3;"asda", 45435;"taylor", 1989;"swift", 233])
+
+type excrement = POO | PEE
+type toilet = TOILET of excrement * excrement
+
+type greet = BYE of toilet | GREET of greet * greet 
+
+(* let test = function 
+      | (BYE (TOILET (POO, PEE))) -> 3
+      |  (BYE (TOILET (PEE, PEE))) -> 3
+      |  (BYE (TOILET (POO, POO))) -> 3
+      |  (BYE (TOILET (PEE, POO))) -> 3
+      |  (GREET (BYE (TOILET (x, y)), a)) -> 3
+      |  (GREET (GREET (x , y), b)) -> 3 *)
+
+(* (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
+(PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])]));
+(PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])])]));
+(PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])])]));
+(PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+(PATTERN ("GREET", [PATTERN ("GREET", [GENERIC; GENERIC]); GENERIC])); *)
+
+let test = function 
+    | x::xs::x::xs::y -> 
