@@ -1,5 +1,5 @@
-exception Pattern_Matching_Not_Exhaustive 
-exception Pattern_Matching_Excessive 
+exception Pattern_Matching_Not_Exhaustive of string
+exception Pattern_Matching_Excessive of string
 exception Ill_Pattern of string
 exception Ill_Typed of string
 exception Not_Found of string
@@ -139,8 +139,8 @@ let rec more_specific m m' = match m, m' with
             | (PATTERN (name, list)), (PATTERN (name', list')) ->
                 (match (list, list') with 
                     | [], [] -> false (* equal specificness *)
-                    | [], _ -> (not (List.exists (fun a -> (not (is_generic a))) list'))
-                    | _, [] -> (not (List.exists (fun a -> (not (is_generic a))) list')) (* equal specificness *)
+                    | [], _ -> (not (List.exists (fun a -> (not (is_generic a))) list'))  (* equal specificness *)
+                    | _, [] -> (not (List.exists (fun a -> (not (is_generic a))) list)) (* equal specificness *)
                     | _     -> double_list_exists more_specific list list')
             | _, _ -> false
 
@@ -166,9 +166,9 @@ let rec equal_pattern p p' =
 let rec pattern_exhaust user_patterns to_match =
         match exhausted_patterns user_patterns to_match with 
             |  [],    [] -> true 
-            |  x::xs, [] -> raise Pattern_Matching_Excessive 
-            |  [], x::xs -> raise Pattern_Matching_Not_Exhaustive
-            |  _         -> raise Pattern_Matching_Not_Exhaustive
+            |  x::xs, [] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
+            |  [], x::xs -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched."))
+            |  _         -> raise (Pattern_Matching_Not_Exhaustive "weird case lmfao")
 (* 
    Returns a tuple of the remaining user_patterns and to_match patterns
 *)
@@ -177,7 +177,7 @@ and exhausted_patterns user_patterns to_match = match user_patterns with
     (* if there are no more remaining patterns to match, but there are still user patterns, 
         then excessive pattern matching *)
     | p::ps -> if (to_match = []) 
-                then raise Pattern_Matching_Excessive  
+                then raise (Pattern_Matching_Excessive ((pattern_to_string p) ^ " will not be reached. "))
                 else  let remaining = (break_down_patterns to_match p) in
                        if (List.length remaining) = (List.length to_match)
                        then 
@@ -237,7 +237,6 @@ let rec all_possible_patterns = function
                                                 | (PATTERN (name', _)) -> not (name = name'))
                                     (get_constructors name) in 
         let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
-
         List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
     | GENERIC              -> [GENERIC]
 
@@ -249,7 +248,7 @@ let validate_patterns user_patterns =
     let most_specific = List.fold_left (fun acc p -> (if (more_specific p acc) then p else acc)) (List.hd user_patterns) (List.tl user_patterns) in 
     let product = all_possible_patterns most_specific in
     let new_product = List.fold_left (fun acc p -> (if (not (List.exists (equal_pattern p) product)) then p::acc else acc)) product user_patterns in
-    let _ = print_endline (list_to_string pattern_to_string new_product) in
+    (* let _ = print_endline (list_to_string pattern_to_string new_product) in *)
     pattern_exhaust user_patterns new_product
 
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))  *)
@@ -301,19 +300,52 @@ let validate_patterns user_patterns =
    GREET(BYE(TOILET (XS, YS)), ZS)
    GREET(GREET(XS, YS), ZS)
    GREET(XS, ZS)
-   BYE(TOILET(POO, PEE))
-   BYE(TOILET(PEE, POO))
-   BYE(TOILET(POO, POO))
-   BYE(TOILET(PEE, PEE))
+   GENERIC
 
    ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
     ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
 *)
-let _ = print_endline (string_of_bool (validate_patterns
-                                        [(PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+(* let _ = print_endline (string_of_bool (validate_patterns
+                                        [
+                                         (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
                                          (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
                                          GENERIC
-                                        ]))
+                                        ]
+                                        )) *)
+
+(* 
+
+let user_patterns = [
+    (cons (cons (cons (cons GENERIC GENERIC) GENERIC) (cons GENERIC GENERIC)) GENERIC);
+    (cons (cons GENERIC GENERIC) GENERIC);
+    (cons nil GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("POO", [])); (PATTERN ("PEE", []))])) GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("POO", [])); (PATTERN ("POO", []))])) GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("PEE", [])); (PATTERN ("PEE", []))])) GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("PEE", [])); (PATTERN ("POO", []))])) GENERIC);
+    nil;
+] *)
+
+(* let user_patterns = [
+    (cons (cons (cons (cons (cons GENERIC GENERIC) GENERIC) GENERIC) (cons GENERIC GENERIC)) GENERIC);
+    (cons (cons GENERIC GENERIC) GENERIC);
+    (cons nil GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("POO", [])); (PATTERN ("PEE", []))])) GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("POO", [])); (PATTERN ("POO", []))])) GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("PEE", [])); (PATTERN ("PEE", []))])) GENERIC);
+    (cons (PATTERN ("TOILET", [(PATTERN ("PEE", [])); (PATTERN ("POO", []))])) GENERIC);
+    nil;
+] *)
+
+(* Cannot believe this worked!!! :D *)
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns)) *)
+
+(* 
+let _ = print_endline (string_of_bool (more_specific (cons (PATTERN ("TOILET", [(PATTERN ("PEE", [])); (PATTERN ("POO", []))])) GENERIC) 
+                                                     (cons (cons (cons (cons GENERIC GENERIC) GENERIC) GENERIC) GENERIC))) *)
+(* let _ = print_endline (string_of_bool (more_specific (cons (cons (cons (cons GENERIC GENERIC) GENERIC) GENERIC) GENERIC)
+                                                    (cons (PATTERN ("TOILET", [(PATTERN ("PEE", [])); (PATTERN ("POO", []))])) GENERIC) 
+                                                     )) *)
 (* 
    
 (x::xs)::(y::ys)
