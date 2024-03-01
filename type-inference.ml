@@ -1,5 +1,3 @@
-(*NOT FINISHED YET*)
-(*TODO: [write support functions for generalize, finish remaining patterns, unit test, clean up code]*)
 type exp = LITERAL of value
          | VAR of string 
          | IF of exp * exp * exp
