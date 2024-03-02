@@ -226,20 +226,31 @@ map_ideals ideal_list user_list = match ideal_list, user_list with
 *)
 let rec pattern_exhaust ideals user_matches = match ideals, user_matches with 
     | [], []      -> true 
-    | [], (x::xs) -> false
-    | (x::xs), [] -> false
+    | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
+    | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users) = find_pairs ideals user_matches in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
         let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in 
-        let _ = print_endline ("recursing on: " ^ (list_to_string pattern_to_string splitted) ^ " and " ^ (list_to_string pattern_to_string (List.append left_over_users first_ideal_instances))) in
+        let _ = print_endline ("recursing on: " ^ (list_to_string pattern_to_string splitted) ^ " and "
+                                         ^ (list_to_string pattern_to_string (List.append left_over_users first_ideal_instances))) in
         pattern_exhaust splitted (List.append left_over_users first_ideal_instances)
 
 let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
 
-let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC));]))
+(* should be not exhaustive *)
+(* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC));])) *)
+(* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC GENERIC)])) *)
 (* let _ = print_endline (list_to_string pattern_to_string (splitting GENERIC nil)) *)
+
+(* should be excessive *)
+(* let user_patterns = [GENERIC; nil] *)
+
+(* should be exessive *)
+(* let user_patterns = [nil; (cons GENERIC GENERIC); (cons GENERIC (cons GENERIC GENERIC))] *)
+
+let _ = print_endline (string_of_bool (validate_patterns user_patterns))
 (*
     UNIT TESTS!
 *)
