@@ -199,17 +199,12 @@ let rec pattern_exhaust ideals user_matches = match ideals, user_matches with
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users) = find_pairs ideals user_matches in
-        let _ = print_endline "" in
-        let _ = print_endline ("pairs: " ^ (list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") pairs)) in
         let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
         let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
-        let _ = print_endline (list_to_string pattern_to_string splitted) in
         let new_ideals = List.append left_over_ideals splitted in 
         let new_users = List.append first_ideal_instances left_over_users in
-        let _ = print_endline ("recursing on: " ^ (list_to_string pattern_to_string new_ideals) ^ " and "
-                                         ^ (list_to_string pattern_to_string new_users)) in
         pattern_exhaust new_ideals new_users
 
 let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
