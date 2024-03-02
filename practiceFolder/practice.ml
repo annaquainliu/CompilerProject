@@ -78,6 +78,3 @@ type greet = BYE of toilet | GREET of greet * greet
 (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])])]));
 (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
 (PATTERN ("GREET", [PATTERN ("GREET", [GENERIC; GENERIC]); GENERIC])); *)
-
-let test = function 
-    | x::xs::x::xs::y -> 

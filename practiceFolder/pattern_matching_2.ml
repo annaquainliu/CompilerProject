@@ -266,7 +266,24 @@ let validate_patterns user_patterns =
     let new_product = List.fold_left (fun acc p -> (if (not (List.exists (equal_pattern p) product)) then p::acc else acc)) product user_patterns in
     let _ = print_endline (list_to_string pattern_to_string product) in
     pattern_exhaust user_patterns new_product
+(* let rec create_ideals ideal user = match ideal, user with  
+    | GENERIC, (PATTERN _) ->  all_possible_patterns user
+    | (PATTERN (name, list), PATTERN (name', list')) -> 
+        let ideals = map_ideals list list' in 
+        (* let _ = print_endline (list_to_string (list_to_string pattern_to_string) ideals) in *)
+        let product = cartesian_product ideals [] [] in
+        (* let _ = print_endline (list_to_string (list_to_string pattern_to_string) product) in *)
+        List.map (fun list -> (PATTERN (name, list))) product
+    | GENERIC, GENERIC -> [GENERIC]
+    | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split")
+and
 
+map_ideals ideal_list user_list = match ideal_list, user_list with 
+    | [], []           -> []
+    | (i::is), (u::us) -> create_ideals i u::(map_ideals is us)
+    | _, _             -> raise (Ill_Pattern "Mismatch constructor lists") *)
+
+    
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))  *)
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC])])) *)
 (* 
