@@ -283,7 +283,7 @@ map_ideals ideal_list user_list = match ideal_list, user_list with
     | (i::is), (u::us) -> create_ideals i u::(map_ideals is us)
     | _, _             -> raise (Ill_Pattern "Mismatch constructor lists") *)
 
-    
+
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])]))  *)
 (* let _ = print_endline (string_of_bool (validate_patterns [PATTERN ("CONS", [GENERIC; GENERIC])])) *)
 (* 
@@ -579,4 +579,6 @@ let product = [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])]); P
 (* let _ = print_endline (list_to_string pattern_to_string (simplify_user_patterns user_patterns)) *)
 (* 
 let _ = print_endline (string_of_bool (pattern_covers (cons GENERIC nil) (cons GENERIC GENERIC))) *)
-(* let _ = print_endline (string_of_bool (pattern_exhaust user_patterns product)) *)
+(* let user_patterns = [nil; GENERIC] *)
+
+let _ = print_endline (string_of_bool (pattern_exhaust user_patterns product))
