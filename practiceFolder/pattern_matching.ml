@@ -52,11 +52,17 @@ let get_fun_result = function
         result
     | _ -> raise (Ill_Typed "get_fun_result")
 
+let toilet a b = PATTERN ("TOILET", [a;b])
+let poo = PATTERN ("POO", [])
+let pee = PATTERN ("PEE", [])
+let cons a b = PATTERN ("CONS", [a;b])
+let nil = PATTERN ("NIL", [])
+let parameters list = PATTERN ("PARAMETERS", list) 
 (* 
   Environment association list of names to list of constructors
 *)
 let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); 
-                    ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns)]
+                    ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns);]
 
 let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); 
                  ("PEE", (funtype ([], TYCON "excrement"))); 
@@ -65,25 +71,8 @@ let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]]
                  ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
                  ("NIL", (funtype ([], TYCON "list")));
                  ("CONS", (funtype ([TYVAR "'a"], TYCON "list")));
-                 ("INT", (funtype ([TYCON "int"], TYCON "int")));]
+                 ("INT", (funtype ([TYCON "int"], TYCON "int")))]
 
-let toilet a b = PATTERN ("TOILET", [a;b])
-let poo = PATTERN ("POO", [])
-let pee = PATTERN ("PEE", [])
-let cons a b = PATTERN ("CONS", [a;b])
-let nil = PATTERN ("NIL", [])
-(* 
-    Algorithm:
-    pattern_exhaust ideal user_patterns : pattern list -> pattern list -> pattern list
-    *ideal begins as [GENERIC]
-    - Match each ideal[i] with the set of user patterns that ideal[i] covers. 
-            E.g, create a list of tuples <ideal, patterns>.
-    - Take first ideal and first user_pattern, and split by comparing each component of the pattern
-      until we see something that is more generic. Take this section of the pattern, compute
-      all patterns of the same generality, and rebuild pattern. 
-    - Remove equals
-    - Recurse on possible patterns and rest of user pattterns
-*)
 
 let rec lookup k = function 
             | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
@@ -93,7 +82,9 @@ let rec double_list_all p list list' =
     match list, list' with 
         | [], [] -> true 
         | (x::xs), (y::ys) -> (p x y) && double_list_all p xs ys
-        | _   -> raise (Ill_Pattern ("ill formed constructors when comparing " ^ (list_to_string pattern_to_string list) ^ " " ^  (list_to_string pattern_to_string list')))
+        | _   -> raise (Ill_Pattern ("ill formed constructors when comparing " ^ 
+                            (list_to_string pattern_to_string list) ^ " " ^  
+                            (list_to_string pattern_to_string list')))
 
 let rec pattern_covers m m' = match m, m' with
             | GENERIC, _       -> true
@@ -114,32 +105,6 @@ let rec cartesian_product input current_list result =
                     (fun acc a -> cartesian_product xs (a::current_list) acc)
                     result
                     x
-(* 
-    Receives constructor names of the type with a constructor name
-    string -> (pattern list)
-*)
-let rec get_constructors name =
-    let tau = lookup name gamma in 
-    lookup (get_tycon_name (get_fun_result tau)) datatypes 
-
-(* 
-
-    Given a pattern, compute all the possible patterns
-    that would exhaust the type on the same level
-    of generality.
-    
-    pattern -> (pattern list)
-*)
-let rec all_possible_patterns = function 
-    | PATTERN (name, list) -> 
-        let constructors = List.filter (fun cons -> 
-                                            match cons with 
-                                                | GENERIC -> true 
-                                                | (PATTERN (name', _)) -> not (name = name'))
-                                    (get_constructors name) in 
-        let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
-        List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
-    | GENERIC              -> [GENERIC]
 
 let get_name = function 
     | (PATTERN (name, _)) -> name
@@ -158,6 +123,54 @@ let rec equal_pattern p p' =
         | GENERIC, GENERIC -> true
         | (PATTERN (name, list), PATTERN (name', list')) -> name = name' && double_list_all equal_pattern list list'
         | _ -> false
+
+
+(* 
+   Given user patterns and the current datatype environment,
+   return true if the user patterns are exhaustive, and 
+   throw an error otherwise.
+*)
+(* 
+    Algorithm:
+    pattern_exhaust ideal user_patterns : pattern list -> pattern list -> pattern list
+    *ideal begins as [GENERIC]
+    - Match each ideal[i] with the set of user patterns that ideal[i] covers. 
+            E.g, create a list of tuples <ideal, patterns>.
+    - Take first ideal and first user_pattern, and split by comparing each component of the pattern
+      until we see something that is more generic. Take this section of the pattern, compute
+      all patterns of the same generality, and rebuild pattern. 
+    - Remove equals
+    - Recurse on possible patterns and rest of user pattterns
+*)
+let validate_patterns user_patterns datatypes gamma = 
+(* 
+    Receives constructor names of the type with a constructor name
+    string -> (pattern list)
+*)
+let rec get_constructors name =
+    let tau = lookup name gamma in 
+    lookup (get_tycon_name (get_fun_result tau)) datatypes 
+in
+(* 
+
+    Given a pattern, compute all the possible patterns
+    that would exhaust the type on the same level
+    of generality.
+    
+    pattern -> (pattern list)
+    
+*)
+let rec all_possible_patterns = function 
+    | PATTERN (name, list) -> 
+        let constructors = List.filter (fun cons -> 
+                                            match cons with 
+                                                | GENERIC -> true 
+                                                | (PATTERN (name', _)) -> not (name = name'))
+                                    (get_constructors name) in 
+        let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
+        List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
+    | GENERIC              -> [GENERIC]
+in
 (* 
    Given an ideal and user patterns, returns a list of tuples
     of matched ideal patterns to user patterns,
@@ -172,6 +185,7 @@ let find_pairs ideals user_matches =
                     ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
         ideals
         ([], user_matches)
+in
 (* 
    Splitting the ideal pattern into the generality 
    of the user pattern, by breaking down the ideal 
@@ -179,28 +193,28 @@ let find_pairs ideals user_matches =
 
    pattern -> pattern -> pattern list
 *)
-let rec splitting ideal user = match ideal, user with  
+let rec splitting ideal user = (match ideal, user with  
     | GENERIC, (PATTERN _) ->  all_possible_patterns user
     | (PATTERN (name, list), PATTERN (name', list')) -> 
         let ideals = map_ideals list list' in 
         let product = cartesian_product ideals [] [] in
         List.map (fun list -> (PATTERN (name, List.rev list))) product
     | GENERIC, GENERIC -> [GENERIC]
-    | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split")
+    | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split"))
 and
 (* Helper function for splitting *)
-map_ideals ideal_list user_list = match ideal_list, user_list with 
+map_ideals ideal_list user_list = (match ideal_list, user_list with 
     | [], []           -> []
     | (i::is), (u::us) -> splitting i u::(map_ideals is us)
-    | _, _             -> raise (Ill_Pattern "Mismatch constructor lists")
-
+    | _, _             -> raise (Ill_Pattern "Mismatch constructor lists"))
+in 
 (* 
    Given a list of ideal patterns and user patterns, 
    returns true if the user patterns exhaust the ideal patterns,
    and throws an error otheriwse.
    [nil; GENERIC]
 *)
-let rec pattern_exhaust ideals user_matches = match ideals, user_matches with 
+let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with 
     | (i::is), [GENERIC] -> true
     | [], []      -> true 
     | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
@@ -213,9 +227,27 @@ let rec pattern_exhaust ideals user_matches = match ideals, user_matches with
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
         let new_ideals = List.append left_over_ideals splitted in 
         let new_users = List.append first_ideal_instances left_over_users in
-        pattern_exhaust new_ideals new_users
+        pattern_exhaust new_ideals new_users)
 
-let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
+in pattern_exhaust [GENERIC] user_patterns
+
+(* 
+   Given the parameters of a function in every case, and the
+   type of the function
+   determine if the cases are exhaustive.
+
+    (pattern list) list -> bool
+*)
+
+let validate_parameters cases = 
+    let first_case = List.hd cases in 
+    let parameter_pattern = (parameters (List.map (fun _ -> GENERIC) first_case)) in
+    let parameter_type = (funtype ([], TYCON "parameters")) in
+    let gamma' = ("PARAMETERS", parameter_type)::gamma in 
+    let datatypes' = ("parameters", [parameter_pattern])::datatypes in 
+    let patterns = List.map (fun list -> (parameters list)) cases in 
+    validate_patterns patterns datatypes' gamma' 
+    
 
 (*
     UNIT TESTS!
@@ -223,6 +255,10 @@ let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
 
 
 (* should be not exhaustive *)
+(* 
+   []
+   x::(y::ys)
+*)
 (* let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));] *)
 (* let user_patterns =  [nil; (cons GENERIC GENERIC)] *)
 
@@ -286,4 +322,30 @@ let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
 (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("PEE", [])]));
 (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
 (PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))] *)
-let _ = print_endline (string_of_bool (validate_patterns user_patterns))
+(* 
+
+    fun hello x::xs [] = 
+            | []    x::xs =
+            | x::xs x::xs =
+            | []    [] =
+*)
+(* let user_patterns = [(parameters [(cons GENERIC GENERIC); nil]); 
+                        (parameters [nil; (cons GENERIC GENERIC)]); 
+                        (parameters [(cons GENERIC GENERIC); (cons GENERIC GENERIC)]);
+                        (parameters [nil; nil])
+                    ] *)
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
+(* let parameters = [[(cons GENERIC GENERIC); nil];
+                    [nil; (cons GENERIC GENERIC)];
+                    [(cons GENERIC GENERIC); (cons GENERIC GENERIC)];
+                    [nil; nil]] *)
+(* 
+   fun hello x::xs = ..
+    | hello [] = ...
+*)
+
+(* let parameters = [[(cons GENERIC GENERIC)];[nil]] *)
+(* 
+let parameters = [[(cons GENERIC GENERIC)]; [(cons nil nil)]; [nil]] *)
+
+(* let _ = print_endline (string_of_bool (validate_parameters parameters)) *)
