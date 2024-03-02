@@ -27,9 +27,17 @@ let get_tycon_name = function
     | (TYCON name) -> name 
     | _ -> raise (Ill_Typed "get_tycon_name")
 
-let rec pattern_to_string = function 
-    | GENERIC -> "GENERIC"
-    | PATTERN (name, list) -> name ^ "(" ^ list_to_string pattern_to_string list ^ ")"
+let rec pattern_list_to_string = function 
+    | [] -> ""
+    | [x] -> pattern_to_string x
+    | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
+
+and pattern_to_string = function 
+    | GENERIC -> "_"
+    | PATTERN (name, list) -> 
+        (match list with 
+        | [] ->  name
+        | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
 
 let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]))]
 let int_patterns = [GENERIC]
@@ -215,7 +223,7 @@ let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
 
 
 (* should be not exhaustive *)
-(* let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));] *)
+let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));]
 (* let user_patterns =  [nil; (cons GENERIC GENERIC)] *)
 
 (* should be excessive *)
