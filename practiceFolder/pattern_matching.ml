@@ -32,11 +32,12 @@ let rec pattern_to_string = function
     | PATTERN (name, list) -> name ^ "(" ^ list_to_string pattern_to_string list ^ ")"
 
 let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]))]
-let int_patterns = [(PATTERN ("INT", [])); GENERIC]
-let bool_patterns = [(PATTERN ("BOOL", [])); GENERIC]
-let string_patterns = [(PATTERN ("STRING", [])); GENERIC]
-let toilet_patterns = [PATTERN ("TOILET", [GENERIC; GENERIC;])]
-let excrement_patterns = [PATTERN ("PEE", []); PATTERN ("POO", []);]
+let int_patterns = [GENERIC]
+let bool_patterns = [GENERIC]
+let string_patterns = [GENERIC]
+let excrement_patterns = [(PATTERN ("POO", [])); (PATTERN ("PEE", []))]
+let toilet_patterns = [(PATTERN ("TOILET", [GENERIC; GENERIC;]))]
+let hello_patterns = [(PATTERN ("GREET", [GENERIC; GENERIC])); (PATTERN ("BYE", [GENERIC]))]
 
 let get_fun_result = function 
     | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
@@ -46,8 +47,8 @@ let get_fun_result = function
 (* 
   Environment association list of names to list of constructors
 *)
-let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns);
-                 ("excrement", excrement_patterns); ("toilet", toilet_patterns)]
+let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); 
+                    ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns)]
 
 let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); 
                  ("PEE", (funtype ([], TYCON "excrement"))); 
@@ -64,38 +65,6 @@ let pee = PATTERN ("PEE", [])
 let cons a b = PATTERN ("CONS", [a;b])
 let nil = PATTERN ("NIL", [])
 (* 
-    Not exhaustive:
-
-    xs covering  {[], x :: y :: zs}
-    and we have [xs := []] making the first pattern an instance of the ideal. So we split xs, getting
-
-    [] covering {[]}
-    x :: ys covering {x :: y :: zs}
-
-    The first of these is justified by the empty injective renaming, so is ok. 
-    The second takes [x := x, ys := y :: zs], so we're away again, splitting ys, getting.
-
-    x :: [] covering {}
-    x :: y :: zs covering {x :: y :: zs} 
-    ------
-
-    Excessive: 
-
-    xs covering {[], x::ys, x::y::zs}
-
-    Split xs
-
-    [] covering {[]}
-    x::xs covering {x::ys, x::y::zs}
-
-    Take first. Same generality, so don't split.
-
-    Remove equals.
-
-    nothing covers {x::y::zs}
-
-    ----
-
     Algorithm:
     pattern_exhaust ideal user_patterns : pattern list -> pattern list -> pattern list
     *ideal begins as [GENERIC]
@@ -235,9 +204,14 @@ let rec pattern_exhaust ideals user_matches = match ideals, user_matches with
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in 
         let _ = print_endline ("recursing on: " ^ (list_to_string pattern_to_string splitted) ^ " and "
                                          ^ (list_to_string pattern_to_string (List.append left_over_users first_ideal_instances))) in
-        pattern_exhaust splitted (List.append left_over_users first_ideal_instances)
+        pattern_exhaust splitted (List.append first_ideal_instances left_over_users )
 
 let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
+
+(*
+    UNIT TESTS!
+*)
+
 
 (* should be not exhaustive *)
 (* let _ = print_endline (string_of_bool (validate_patterns [nil; (cons GENERIC (cons GENERIC GENERIC));])) *)
@@ -249,13 +223,6 @@ let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
 
 (* should be exessive *)
 (* let user_patterns = [nil; (cons GENERIC GENERIC); (cons GENERIC (cons GENERIC GENERIC))] *)
-
-let _ = print_endline (string_of_bool (validate_patterns user_patterns))
-(*
-    UNIT TESTS!
-*)
-
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])] *)
 (* 
    x::y::zs
    z::[]
@@ -263,72 +230,33 @@ let _ = print_endline (string_of_bool (validate_patterns user_patterns))
 
    should pass
 *)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]); PATTERN ("NIL", []);] *)
+(* let user_patterns = [(cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil); nil] *)
 
 (* 
-   same as above but diff order, so should pass
+   Should pass!
 *)
-(* let user_patterns = [PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]);  PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("NIL", []);] *)
-(* let user_patterns = [PATTERN ("NIL", []); PATTERN("CONS", [GENERIC; PATTERN("NIL", [])]);  PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); ] *)
-
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC])] *)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC])] *)
-(* let user_patterns = [PATTERN ("NIL", []); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN("NIL", [])] *)
-(* let user_patterns = [PATTERN ("NIL", [])] *)
+(* let user_patterns  =
+[
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])]));
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])])]));
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])])]));
+    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+    (PATTERN ("GREET", [PATTERN ("GREET", [GENERIC; GENERIC]); GENERIC]));
+] *)
 
 (* 
-   X::Y::YS
-   Y::YS
-   []
-
    should pass
 *)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN("NIL", [])] *)
-
-(*
-   
-    Y::YS
-    X::Y::YS
-    []
-
-    should not pass
-*)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("CONS", [GENERIC; PATTERN ("CONS", [GENERIC; GENERIC])]);  PATTERN("NIL", [])] *)
-
-(* let user_patterns = [PATTERN ("NIL", []); GENERIC] *)
-
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; GENERIC]); GENERIC] *)
+(* let user_patterns = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] *)
 (* 
-   x::[]
-   x::xs
    []
+   []::(x::ys)
+   (x::ys)::[]
+   (x::xs)::(y::ys)
+   []::[]
 *)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC; PATTERN ("NIL", [])]); PATTERN ("CONS", [GENERIC; GENERIC]); PATTERN ("NIL", [])] *)
-(* 
-   x::ys
-   ys
-*)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); GENERIC] *)
+(* let user_patterns = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] *)
+(* let user_patterns = [PATTERN ("TOILET", [GENERIC; GENERIC]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])] *)
 
-(* 
-   "hi"::xs
-   x::xs
-   []
-
-   pass
-*)
-(* let user_patterns = [PATTERN ("CONS", [PATTERN ("STRING", []); GENERIC]); PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN ("NIL", [])] *)
-
-(* 
-    X::XS
-   "hi"::xs
-   []
-
-   fail
-*)
-(* let user_patterns = [PATTERN ("CONS", [GENERIC;GENERIC]); PATTERN ("CONS", [PATTERN ("STRING", []); GENERIC]); PATTERN ("NIL", [])] *)
-
-
-
-
-(* let _ = validate_patterns user_patterns *)
+let _ = print_endline (string_of_bool (validate_patterns user_patterns))
