@@ -223,7 +223,7 @@ let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
 
 
 (* should be not exhaustive *)
-let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));]
+(* let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));] *)
 (* let user_patterns =  [nil; (cons GENERIC GENERIC)] *)
 
 (* should be excessive *)
@@ -276,5 +276,14 @@ let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));]
 ] *)
 (* let user_patterns = [PATTERN ("INT", []); GENERIC] *)
 (* let user_patterns = [(cons (PATTERN ("INT", [])) GENERIC); (cons GENERIC GENERIC); nil] *)
-
+(* let user_patterns = 
+[
+    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
+    GENERIC
+   ] *)
+(* let user_patterns =  [(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("PEE", [])]));
+(PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("PEE", [])]));
+(PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
+(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))] *)
 let _ = print_endline (string_of_bool (validate_patterns user_patterns))
