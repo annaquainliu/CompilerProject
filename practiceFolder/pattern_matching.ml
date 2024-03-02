@@ -156,14 +156,14 @@ let rec equal_pattern p p' =
    and the rest of the user_matches left over.
 *)
 let find_pairs ideals user_matches = 
-    List.fold_left 
-        (fun (pairs, users) i -> 
+    List.fold_right 
+        (fun i (pairs, users) -> 
             if (not (List.exists (pattern_covers i) users)) 
             then (pairs, users)
             else let matched = List.find (pattern_covers i) users in 
                     ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
-        ([], user_matches)
         ideals
+        ([], user_matches)
 (* 
    Splitting the ideal pattern into the generality 
    of the user pattern, by breaking down the ideal 
@@ -175,9 +175,7 @@ let rec splitting ideal user = match ideal, user with
     | GENERIC, (PATTERN _) ->  all_possible_patterns user
     | (PATTERN (name, list), PATTERN (name', list')) -> 
         let ideals = map_ideals list list' in 
-        (* let _ = print_endline (list_to_string (list_to_string pattern_to_string) ideals) in *)
         let product = cartesian_product ideals [] [] in
-        (* let _ = print_endline (list_to_string (list_to_string pattern_to_string) product) in *)
         List.map (fun list -> (PATTERN (name, List.rev list))) product
     | GENERIC, GENERIC -> [GENERIC]
     | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split")
@@ -201,10 +199,13 @@ let rec pattern_exhaust ideals user_matches = match ideals, user_matches with
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users) = find_pairs ideals user_matches in
+        let _ = print_endline "" in
+        let _ = print_endline ("pairs: " ^ (list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") pairs)) in
         let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
         let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
+        let _ = print_endline (list_to_string pattern_to_string splitted) in
         let new_ideals = List.append left_over_ideals splitted in 
         let new_users = List.append first_ideal_instances left_over_users in
         let _ = print_endline ("recursing on: " ^ (list_to_string pattern_to_string new_ideals) ^ " and "
@@ -261,7 +262,16 @@ let validate_patterns user_patterns = pattern_exhaust [GENERIC] user_patterns
    []::[]
 *)
 (* let user_patterns = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] *)
-(* shoudl be exhaustive *)
+(* shouldnt be exhaustive *)
 (* let user_patterns = [PATTERN ("TOILET", [GENERIC; GENERIC]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])] *)
-let user_patterns = [nil; GENERIC]
+(* let user_patterns = [nil; GENERIC] *)
+(* let user_patterns = 
+[
+    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
+    GENERIC
+] *)
+(* let user_patterns = [PATTERN ("INT", []); GENERIC] *)
+(* let user_patterns = [(cons (PATTERN ("INT", [])) GENERIC); (cons GENERIC GENERIC); nil] *)
+
 let _ = print_endline (string_of_bool (validate_patterns user_patterns))
