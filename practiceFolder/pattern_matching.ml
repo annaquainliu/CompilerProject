@@ -11,7 +11,7 @@ let list_to_string f xs =
       |  (x::xs)    -> (f x) ^ ", " ^ stringify xs
     in "[" ^ stringify xs ^ "]"
 
-type pattern = GENERIC
+type pattern = GENERIC of string
             |  PATTERN of string * (pattern list)
 
 type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
@@ -33,19 +33,21 @@ let rec pattern_list_to_string = function
     | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
 
 and pattern_to_string = function 
-    | GENERIC -> "_"
+    | (GENERIC x) -> x
     | PATTERN (name, list) -> 
         (match list with 
         | [] ->  name
         | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
 
-let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [GENERIC; GENERIC]))]
-let int_patterns = [GENERIC]
-let bool_patterns = [GENERIC]
-let string_patterns = [GENERIC]
+let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
+
+let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [(GENERIC "_"); (GENERIC "_")]))]
+let int_patterns = [(GENERIC "_")]
+let bool_patterns = [(GENERIC "_")]
+let string_patterns = [(GENERIC "_")]
 let excrement_patterns = [(PATTERN ("POO", [])); (PATTERN ("PEE", []))]
-let toilet_patterns = [(PATTERN ("TOILET", [GENERIC; GENERIC;]))]
-let hello_patterns = [(PATTERN ("GREET", [GENERIC; GENERIC])); (PATTERN ("BYE", [GENERIC]))]
+let toilet_patterns = [(PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_");]))]
+let hello_patterns = [(PATTERN ("GREET", [(GENERIC "_"); (GENERIC "_")])); (PATTERN ("BYE", [(GENERIC "_")]))]
 
 let get_fun_result = function 
     | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
@@ -87,7 +89,7 @@ let rec double_list_all p list list' =
                             (list_to_string pattern_to_string list')))
 
 let rec pattern_covers m m' = match m, m' with
-            | GENERIC, _       -> true
+            | (GENERIC _), _       -> true
             | (PATTERN (name, list)), (PATTERN (name', list')) ->
                 name = name' && (double_list_all pattern_covers list list')
             | _   -> false
@@ -120,10 +122,24 @@ let get_name = function
 *)
 let rec equal_pattern p p' = 
     match p, p' with 
-        | GENERIC, GENERIC -> true
+        | (GENERIC _), (GENERIC _) -> true
         | (PATTERN (name, list), PATTERN (name', list')) -> name = name' && double_list_all equal_pattern list list'
         | _ -> false
 
+(* 
+   Given an ideal and user patterns, returns a list of tuples
+    of matched ideal patterns to user patterns,
+   and the rest of the user_matches left over.
+*)
+let find_pairs ideals user_matches = 
+    List.fold_left
+        (fun (pairs, users) i -> 
+            if (not (List.exists (pattern_covers i) users)) 
+            then (pairs, users)
+            else let matched = List.find (pattern_covers i) users in 
+                    ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
+        ([], user_matches)
+        ideals
 
 (* 
    Given user patterns and the current datatype environment,
@@ -148,7 +164,7 @@ let validate_patterns user_patterns datatypes gamma =
     string -> (pattern list)
 *)
 let rec get_constructors name =
-    let tau = lookup name gamma in 
+    let tau = lookup name gamma in
     lookup (get_tycon_name (get_fun_result tau)) datatypes 
 in
 (* 
@@ -164,27 +180,12 @@ let rec all_possible_patterns = function
     | PATTERN (name, list) -> 
         let constructors = List.filter (fun cons -> 
                                             match cons with 
-                                                | GENERIC -> true 
+                                                | (GENERIC _) -> true 
                                                 | (PATTERN (name', _)) -> not (name = name'))
                                     (get_constructors name) in 
         let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
         List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
-    | GENERIC              -> [GENERIC]
-in
-(* 
-   Given an ideal and user patterns, returns a list of tuples
-    of matched ideal patterns to user patterns,
-   and the rest of the user_matches left over.
-*)
-let find_pairs ideals user_matches = 
-    List.fold_right 
-        (fun i (pairs, users) -> 
-            if (not (List.exists (pattern_covers i) users)) 
-            then (pairs, users)
-            else let matched = List.find (pattern_covers i) users in 
-                    ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
-        ideals
-        ([], user_matches)
+    | (GENERIC _)              -> [GENERIC "_"]
 in
 (* 
    Splitting the ideal pattern into the generality 
@@ -194,12 +195,12 @@ in
    pattern -> pattern -> pattern list
 *)
 let rec splitting ideal user = (match ideal, user with  
-    | GENERIC, (PATTERN _) ->  all_possible_patterns user
+    | (GENERIC _), (PATTERN _) ->  all_possible_patterns user
     | (PATTERN (name, list), PATTERN (name', list')) -> 
         let ideals = map_ideals list list' in 
         let product = cartesian_product ideals [] [] in
         List.map (fun list -> (PATTERN (name, List.rev list))) product
-    | GENERIC, GENERIC -> [GENERIC]
+    | (GENERIC _), (GENERIC _) -> [GENERIC "_"]
     | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split"))
 and
 (* Helper function for splitting *)
@@ -212,10 +213,10 @@ in
    Given a list of ideal patterns and user patterns, 
    returns true if the user patterns exhaust the ideal patterns,
    and throws an error otheriwse.
-   [nil; GENERIC]
+   [nil; (GENERIC _)]
 *)
 let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with 
-    | (i::is), [GENERIC] -> true
+    | (i::is), [(GENERIC _)] -> true
     | [], []      -> true 
     | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
@@ -229,7 +230,7 @@ let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with
         let new_users = List.append first_ideal_instances left_over_users in
         pattern_exhaust new_ideals new_users)
 
-in pattern_exhaust [GENERIC] user_patterns
+in pattern_exhaust [GENERIC "_"] user_patterns
 
 (* 
    Given the parameters of a function in every case, and the
@@ -241,7 +242,7 @@ in pattern_exhaust [GENERIC] user_patterns
 
 let validate_parameters cases = 
     let first_case = List.hd cases in 
-    let parameter_pattern = (parameters (List.map (fun _ -> GENERIC) first_case)) in
+    let parameter_pattern = (parameters (List.map (fun _ -> (GENERIC "_")) first_case)) in
     let parameter_type = (funtype ([], TYCON "parameters")) in
     let gamma' = ("PARAMETERS", parameter_type)::gamma in 
     let datatypes' = ("parameters", [parameter_pattern])::datatypes in 
@@ -259,14 +260,14 @@ let validate_parameters cases =
    []
    x::(y::ys)
 *)
-(* let user_patterns = [nil; (cons GENERIC (cons GENERIC GENERIC));] *)
-(* let user_patterns =  [nil; (cons GENERIC GENERIC)] *)
+(* let user_patterns = [nil; (cons (GENERIC "_") (cons (GENERIC "_") (GENERIC "_")));] *)
+(* let user_patterns =  [nil; (cons (GENERIC "_") (GENERIC "_"))] *)
 
 (* should be excessive *)
-(* let user_patterns = [GENERIC; nil] *)
+(* let user_patterns = [(GENERIC "_"); nil] *)
 
 (* should be exessive *)
-(* let user_patterns = [nil; (cons GENERIC GENERIC); (cons GENERIC (cons GENERIC GENERIC))] *)
+(* let user_patterns = [nil; (cons (GENERIC "_") (GENERIC "_")); (cons (GENERIC "_") (cons (GENERIC "_") (GENERIC "_")))] *)
 (* 
    x::y::zs
    z::[]
@@ -274,7 +275,7 @@ let validate_parameters cases =
 
    should pass
 *)
-(* let user_patterns = [(cons GENERIC (cons GENERIC GENERIC)); (cons GENERIC nil); nil] *)
+(* let user_patterns = [(cons (GENERIC "_") (cons (GENERIC "_") (GENERIC "_"))); (cons (GENERIC "_") nil); nil] *)
 
 (* 
    Should pass!
@@ -285,14 +286,14 @@ let validate_parameters cases =
     (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])]));
     (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])])]));
     (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])])]));
-    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
-    (PATTERN ("GREET", [PATTERN ("GREET", [GENERIC; GENERIC]); GENERIC]));
+    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
+    (PATTERN ("GREET", [PATTERN ("GREET", [(GENERIC "_"); (GENERIC "_")]); (GENERIC "_")]));
 ] *)
 
 (* 
    should pass
 *)
-(* let user_patterns = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] *)
+(* let user_patterns = [nil; (cons nil (cons (GENERIC "_") (GENERIC "_"))); (cons (cons (GENERIC "_") (GENERIC "_")) nil); (cons (cons (GENERIC "_") (GENERIC "_")) (cons (GENERIC "_") (GENERIC "_"))); (cons nil nil)] *)
 (* 
    []
    []::(x::ys)
@@ -300,28 +301,30 @@ let validate_parameters cases =
    (x::xs)::(y::ys)
    []::[]
 *)
-(* let user_patterns = [nil; (cons nil (cons GENERIC GENERIC)); (cons (cons GENERIC GENERIC) nil); (cons (cons GENERIC GENERIC) (cons GENERIC GENERIC)); (cons nil nil)] *)
+(* let user_patterns = [nil; (cons nil (cons (GENERIC "_") (GENERIC "_"))); (cons (cons (GENERIC "_") (GENERIC "_")) nil); (cons (cons (GENERIC "_") (GENERIC "_")) (cons (GENERIC "_") (GENERIC "_"))); (cons nil nil)] *)
 (* shouldnt be exhaustive *)
-(* let user_patterns = [PATTERN ("TOILET", [GENERIC; GENERIC]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])] *)
-(* let user_patterns = [nil; GENERIC] *)
+(* let user_patterns = [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])] *)
+(* let user_patterns = [nil; (GENERIC "_")] *)
 (* let user_patterns = 
 [
-    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
     (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
-    GENERIC
+    (GENERIC "_")
 ] *)
-(* let user_patterns = [PATTERN ("INT", []); GENERIC] *)
-(* let user_patterns = [(cons (PATTERN ("INT", [])) GENERIC); (cons GENERIC GENERIC); nil] *)
+(* let user_patterns = [(cons (PATTERN ("INT", [])) (GENERIC "_")); (cons (GENERIC "_") (GENERIC "_")); nil] *)
 (* let user_patterns = 
 [
-    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [GENERIC; GENERIC])]); GENERIC]));
+    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
     (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
-    GENERIC
+    (GENERIC "_")
    ] *)
 (* let user_patterns =  [(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("PEE", [])]));
 (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("PEE", [])]));
 (PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
 (PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))] *)
+(* let user_patterns = [PATTERN ("INT", []); (GENERIC "_")] *)
+(* let user_patterns = [(cons (GENERIC "_") (GENERIC "_")); nil] *)
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 (* 
 
     fun hello x::xs [] = 
@@ -329,23 +332,23 @@ let validate_parameters cases =
             | x::xs x::xs =
             | []    [] =
 *)
-(* let user_patterns = [(parameters [(cons GENERIC GENERIC); nil]); 
-                        (parameters [nil; (cons GENERIC GENERIC)]); 
-                        (parameters [(cons GENERIC GENERIC); (cons GENERIC GENERIC)]);
+(* let user_patterns = [(parameters [(cons (GENERIC "_") (GENERIC "_")); nil]); 
+                        (parameters [nil; (cons (GENERIC "_") (GENERIC "_"))]); 
+                        (parameters [(cons (GENERIC "_") (GENERIC "_")); (cons (GENERIC "_") (GENERIC "_"))]);
                         (parameters [nil; nil])
                     ] *)
-(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
-(* let parameters = [[(cons GENERIC GENERIC); nil];
-                    [nil; (cons GENERIC GENERIC)];
-                    [(cons GENERIC GENERIC); (cons GENERIC GENERIC)];
+(* let parameters = [[(cons (GENERIC "_") (GENERIC "_")); nil];
+                    [nil; (cons (GENERIC "_") (GENERIC "_"))];
+                    [(cons (GENERIC "_") (GENERIC "_")); (cons (GENERIC "_") (GENERIC "_"))];
                     [nil; nil]] *)
 (* 
    fun hello x::xs = ..
     | hello [] = ...
 *)
 
-(* let parameters = [[(cons GENERIC GENERIC)];[nil]] *)
-(* 
-let parameters = [[(cons GENERIC GENERIC)]; [(cons nil nil)]; [nil]] *)
-
+(* let parameters = [[(cons (GENERIC "_") (GENERIC "_"))];[nil]] *)
+(* Excessive *)
+(* let parameters = [[(cons (GENERIC "_") (GENERIC "_"))]; [(cons nil nil)]; [nil]] *)
+(* let parameters = [[(GENERIC "_")]]  *)
+(* let parameters = [[(GENERIC "_"); (GENERIC "_")]] *)
 (* let _ = print_endline (string_of_bool (validate_parameters parameters)) *)
