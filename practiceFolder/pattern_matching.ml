@@ -73,8 +73,8 @@ let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]]
                  ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
                  ("NIL", (funtype ([], TYCON "list")));
                  ("CONS", (funtype ([TYVAR "'a"], TYCON "list")));
-                 ("INT", (funtype ([TYCON "int"], TYCON "int")))]
-
+                 ("INT", (funtype ([TYCON "int"], TYCON "int")));
+                 ("STRING", (funtype ([TYCON "string"], TYCON "string")))]
 
 let rec lookup k = function 
             | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
@@ -324,6 +324,8 @@ let validate_parameters cases =
 (PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))] *)
 (* let user_patterns = [PATTERN ("INT", []); (GENERIC "_")] *)
 (* let user_patterns = [(cons (GENERIC "_") (GENERIC "_")); nil] *)
+(* let user_patterns = [(PATTERN ("INT" ,[GENERIC "3"])); GENERIC "x"] *)
+(* let user_patterns = [(cons (PATTERN ("STRING", [GENERIC "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil] *)
 (* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 (* 
 
