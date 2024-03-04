@@ -43,30 +43,40 @@ and pattern_to_string = function
 
 let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
 
-let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [(GENERIC "_"); (GENERIC "_")]))]
+let tuple_pattern list = PATTERN ("TUPLE", list)
+let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [tuple_pattern [(GENERIC "_"); (GENERIC "_")]]))]
 let int_patterns = [(GENERIC "_")]
 let bool_patterns = [(GENERIC "_")]
 let string_patterns = [(GENERIC "_")]
 let excrement_patterns = [(PATTERN ("POO", [])); (PATTERN ("PEE", []))]
-let toilet_patterns = [(PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_");]))]
-let hello_patterns = [(PATTERN ("GREET", [(GENERIC "_"); (GENERIC "_")])); (PATTERN ("BYE", [(GENERIC "_")]))]
+let toilet_patterns = [(PATTERN ("TOILET", [tuple_pattern [(GENERIC "_"); (GENERIC "_");]]))]
+let hello_patterns = [(PATTERN ("GREET", [tuple_pattern [(GENERIC "_"); (GENERIC "_")]])); (PATTERN ("BYE", [(GENERIC "_")]))]
 
 let get_fun_result = function 
     | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
         result
     | _ -> raise (Ill_Typed "get_fun_result")
 
-let toilet a b = PATTERN ("TOILET", [a;b])
+let toilet a b = PATTERN ("TOILET", [tuple_pattern [a;b]])
 let poo = PATTERN ("POO", [])
 let pee = PATTERN ("PEE", [])
-let cons a b = PATTERN ("CONS", [a;b])
+let cons a b = PATTERN ("CONS",[(tuple_pattern [a;b])])
 let nil = PATTERN ("NIL", [])
-let parameters list = PATTERN ("PARAMETERS", list) 
+let parameters list = PATTERN ("PARAMETERS", list)
+(* 
+   (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
+    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
+    (GENERIC "_")
+*)
+let bye a = PATTERN ("BYE", [a])
+let greet a b = PATTERN ("GREET", [tuple_pattern [a;b]])
+
 (* 
   Environment association list of names to list of constructors
 *)
 let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); 
-                    ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns);]
+                    ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns);
+                    ("tuple", [])]
 
 let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); 
                  ("PEE", (funtype ([], TYCON "excrement"))); 
@@ -74,9 +84,10 @@ let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]]
                  ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
                  ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
                  ("NIL", (funtype ([], TYCON "list")));
-                 ("CONS", (funtype ([TYVAR "'a"], TYCON "list")));
+                 ("CONS", (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], TYCON "list")));
                  ("INT", (funtype ([TYCON "int"], TYCON "int")));
-                 ("STRING", (funtype ([TYCON "string"], TYCON "string")))]
+                 ("STRING", (funtype ([TYCON "string"], TYCON "string")));
+                 ("TUPLE", (funtype ([], TYCON "tuple")))]
 
 let rec lookup k = function 
             | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
@@ -228,6 +239,7 @@ let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with
     | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
+        (* let _ = print_endline ((list_to_string pattern_to_string ideals) ^ (list_to_string pattern_to_string user_matches)) in *)
         let (pairs, left_over_users) = find_pairs ideals user_matches in
         let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
@@ -289,12 +301,12 @@ let validate_parameters cases =
 *)
 (* let user_patterns  =
 [
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("POO", [])])]));
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("PEE", []); PATTERN ("PEE", [])])]));
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("POO", [])])]));
-    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
-    (PATTERN ("GREET", [PATTERN ("GREET", [(GENERIC "_"); (GENERIC "_")]); (GENERIC "_")]));
+    (bye (toilet poo pee));
+    (bye (toilet pee poo));
+    (bye (toilet poo poo));
+    (bye (toilet pee pee));
+    (greet (bye (toilet (GENERIC "_") (GENERIC "_"))) (GENERIC "_"));
+    (greet (greet (GENERIC "_") (GENERIC "_")) (GENERIC "_"))
 ] *)
 
 (* 
@@ -308,27 +320,29 @@ let validate_parameters cases =
    (x::xs)::(y::ys)
    []::[]
 *)
-(* let user_patterns = [nil; (cons nil (cons (GENERIC "_") (GENERIC "_"))); (cons (cons (GENERIC "_") (GENERIC "_")) nil); (cons (cons (GENERIC "_") (GENERIC "_")) (cons (GENERIC "_") (GENERIC "_"))); (cons nil nil)] *)
+(* let user_patterns = [nil; 
+                    (cons nil (cons (GENERIC "_") (GENERIC "_"))); 
+                    (cons (cons (GENERIC "_") (GENERIC "_")) nil); 
+                    (cons (cons (GENERIC "_") (GENERIC "_")) (cons (GENERIC "_") (GENERIC "_")));
+                     (cons nil nil)] *)
+
 (* shouldnt be exhaustive *)
-(* let user_patterns = [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")]); PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])] *)
+(* let user_patterns = [(toilet (GENERIC "_") (GENERIC "_")); (toilet poo pee)] *)
 (* let user_patterns = [nil; (GENERIC "_")] *)
-(* let user_patterns = 
-[
-    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
-    (GENERIC "_")
-] *)
+
 (* let user_patterns = [(cons (PATTERN ("INT", [VALUE "56"])) (GENERIC "_")); (cons (GENERIC "_") (GENERIC "_")); nil] *)
+
 (* let user_patterns = 
 [
-    (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
-    (GENERIC "_")
-   ] *)
-(* let user_patterns =  [(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("PEE", [])]));
-(PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("PEE", [])]));
-(PATTERN ("TOILET", [PATTERN ("PEE", []);PATTERN ("POO", [])]));
-(PATTERN ("TOILET", [PATTERN ("POO", []);PATTERN ("POO", [])]))] *)
+   (greet (bye (toilet (GENERIC "_") (GENERIC "_"))) (GENERIC "_"));
+   (bye (toilet poo pee));
+   (GENERIC "_")
+] *)
+
+(* let user_patterns =  [(PATTERN ("TOILET", [tuple_pattern [PATTERN ("POO", []);PATTERN ("PEE", [])]]));
+(PATTERN ("TOILET",  [tuple_pattern [PATTERN ("PEE", []);PATTERN ("PEE", [])]]));
+(PATTERN ("TOILET", [tuple_pattern [PATTERN ("PEE", []);PATTERN ("POO", [])]]));
+(PATTERN ("TOILET", [tuple_pattern [PATTERN ("POO", []);PATTERN ("POO", [])]]))] *)
 (* let user_patterns = [(cons (GENERIC "_") (GENERIC "_")); nil] *)
 (* let user_patterns = [(PATTERN ("INT" ,[VALUE "3"])); GENERIC "x"] *)
 (* let user_patterns = [(cons (PATTERN ("STRING", [VALUE "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil] *)
