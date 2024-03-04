@@ -171,8 +171,9 @@ let tokenize queue =
             |  e     -> let exp = token e in exp::(tokenMatchExps (Queue.pop queue))
       and tokenConsArgs = function 
             | ")" -> []
-            |  x  -> let arg = tokenPattern (Queue.pop queue) in 
-                     arg::tokenConsArgs (Queue.pop queue)
+            |  x  -> let arg = tokenPattern x in 
+                     let args = tokenConsArgs (Queue.pop queue) in 
+                     arg::args
       and tokenPattern = function 
             | "(" -> let name = Queue.pop queue in 
                     let cons_params = tokenConsArgs (Queue.pop queue) in 
@@ -185,10 +186,10 @@ let tokenize queue =
             | x    -> (GENERIC x)
       and tokenPatternParams = function 
             | "="  -> []
-            | x    -> let p = (tokenPattern (Queue.pop queue)) in 
+            | x    -> let p = (tokenPattern x) in 
                       p::(tokenPatternParams (Queue.pop queue))
       and tokenMatchCases () = 
-            if (Queue.peek queue) = "|"
+            if (Queue.length queue) <> 0 && (Queue.peek queue) = "|"
             then let _ = Queue.pop queue in (* popping "|" *)
                  let patterns = tokenPatternParams (Queue.pop queue) in 
                  let exp  = token (Queue.pop queue) in
@@ -257,7 +258,7 @@ let rec eval_exp exp rho =
         | (LET (defs, body)) -> 
             let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
-        | _   -> raise (Ill_Typed "match exp not implemented")
+        | m  -> (STRING (exp_to_string m))
     in eval exp  
 (* 
    def -> (string * value) list -> (value * rho)
