@@ -80,7 +80,7 @@ let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]]
             ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
             ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
             ("NIL", (funtype ([], TYCON "list")));
-            ("CONS", (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], TYCON "list")));
+            ("CONS", (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], (listty (TYVAR "'a")))));
             ("INT", (funtype ([TYCON "int"], TYCON "int")));
             ("STRING", (funtype ([TYCON "string"], TYCON "string")));
             ("TUPLE", (funtype ([], TYCON "tuple")));
@@ -177,7 +177,12 @@ let validate_patterns user_patterns datatypes gamma =
 *)
 let rec get_constructors name =
     let tau = lookup name gamma in
-    lookup (get_tycon_name (get_fun_result tau)) datatypes 
+    let name = match (get_fun_result tau) with 
+                 | (CONAPP (TYCON n, list)) -> n
+                 | TYCON n -> n
+                 | _          -> raise (Ill_Typed "Tried to get constructor name of a tyvar")
+    in 
+    lookup name datatypes 
 in
 (* 
 
