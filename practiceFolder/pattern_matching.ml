@@ -63,11 +63,7 @@ let pee = PATTERN ("PEE", [])
 let cons a b = PATTERN ("CONS",[(tuple_pattern [a;b])])
 let nil = PATTERN ("NIL", [])
 let parameters list = PATTERN ("PARAMETERS", list)
-(* 
-   (PATTERN ("GREET", [PATTERN ("BYE", [PATTERN ("TOILET", [(GENERIC "_"); (GENERIC "_")])]); (GENERIC "_")]));
-    (PATTERN ("BYE", [PATTERN ("TOILET", [PATTERN ("POO", []); PATTERN ("PEE", [])])]));
-    (GENERIC "_")
-*)
+
 let bye a = PATTERN ("BYE", [a])
 let greet a b = PATTERN ("GREET", [tuple_pattern [a;b]])
 
@@ -76,18 +72,19 @@ let greet a b = PATTERN ("GREET", [tuple_pattern [a;b]])
 *)
 let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); 
                     ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns);
-                    ("tuple", [])]
+                    ("tuple", []); ("parameters", [])]
 
 let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); 
-                 ("PEE", (funtype ([], TYCON "excrement"))); 
-                 ("POO", (funtype ([], TYCON "excrement"))); 
-                 ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
-                 ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
-                 ("NIL", (funtype ([], TYCON "list")));
-                 ("CONS", (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], TYCON "list")));
-                 ("INT", (funtype ([TYCON "int"], TYCON "int")));
-                 ("STRING", (funtype ([TYCON "string"], TYCON "string")));
-                 ("TUPLE", (funtype ([], TYCON "tuple")))]
+            ("PEE", (funtype ([], TYCON "excrement"))); 
+            ("POO", (funtype ([], TYCON "excrement"))); 
+            ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
+            ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
+            ("NIL", (funtype ([], TYCON "list")));
+            ("CONS", (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], TYCON "list")));
+            ("INT", (funtype ([TYCON "int"], TYCON "int")));
+            ("STRING", (funtype ([TYCON "string"], TYCON "string")));
+            ("TUPLE", (funtype ([], TYCON "tuple")));
+            ("PARAMETERS", (funtype ([], TYCON "parameters")))]
 
 let rec lookup k = function 
             | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
@@ -260,13 +257,8 @@ in pattern_exhaust [GENERIC "_"] user_patterns
 *)
 
 let validate_parameters cases = 
-    let first_case = List.hd cases in 
-    let parameter_pattern = (parameters (List.map (fun _ -> (GENERIC "_")) first_case)) in
-    let parameter_type = (funtype ([], TYCON "parameters")) in
-    let gamma' = ("PARAMETERS", parameter_type)::gamma in 
-    let datatypes' = ("parameters", [parameter_pattern])::datatypes in 
-    let patterns = List.map (fun list -> (parameters list)) cases in 
-    validate_patterns patterns datatypes' gamma' 
+    let patterns = List.map (fun list -> (parameters list)) cases in  
+    validate_patterns patterns datatypes gamma
     
 
 (*
@@ -346,7 +338,7 @@ let validate_parameters cases =
 (* let user_patterns = [(cons (GENERIC "_") (GENERIC "_")); nil] *)
 (* let user_patterns = [(PATTERN ("INT" ,[VALUE "3"])); GENERIC "x"] *)
 (* let user_patterns = [(cons (PATTERN ("STRING", [VALUE "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil] *)
-let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 
 (* 
 
