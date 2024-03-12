@@ -11,9 +11,28 @@ let list_to_string f xs =
       |  (x::xs)    -> (f x) ^ ", " ^ stringify xs
     in "[" ^ stringify xs ^ "]"
 
-type pattern = GENERIC of string
-            |  VALUE of string 
-            |  PATTERN of string * (pattern list)
+
+type exp = LITERAL of value
+        | VAR of string 
+        | IF of exp * exp * exp
+        | APPLY of exp * exp list 
+        | LAMBDA of string list * exp
+        | LET of def list * exp
+        | MATCH of exp list * ((pattern list) * exp) list
+and value =    STRING of string 
+       |  NUMBER of int
+       |  BOOLV  of bool
+       |  NIL
+       |  PAIR of value * value
+       |  CLOSURE of exp * (string * value) list
+       |  PRIMITIVE of (value list -> value)
+and def =  LETDEF of string * exp
+       | LETREC of string * exp 
+       | EXP of exp
+and pattern = GENERIC of string
+        |  VALUE of value 
+        |  PATTERN of string * (pattern list)
+
 
 type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
 let intty = TYCON "int"
@@ -28,19 +47,46 @@ let get_tycon_name = function
     | (TYCON name) -> name 
     | _ -> raise (Ill_Typed "get_tycon_name")
 
-let rec pattern_list_to_string = function 
-    | [] -> ""
-    | [x] -> pattern_to_string x
-    | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
+
+let rec def_to_string = function 
+    | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
+    | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
+    | (EXP e) -> "EXP(it, " ^ exp_to_string e ^ ")"
+and exp_to_string = function 
+   | (LITERAL v) -> value_to_string v
+   | (VAR s) -> "VAR(" ^ s ^ ")"
+   | (IF (e, e2, e3)) -> "IF(" ^ exp_to_string e ^ ", " ^ exp_to_string e2 ^ ", " ^ exp_to_string e3 ^ ")"
+   | (APPLY (f, args)) -> "APPLY(" ^ exp_to_string f ^ ", " ^ list_to_string exp_to_string args ^")"
+   | (LAMBDA (xs, e))  -> "LAMBDA(" ^ list_to_string (fun a -> a) xs ^ ", " ^ exp_to_string e ^ ")"
+   | (LET (ds, e)) -> "LET(" ^ list_to_string def_to_string ds ^ ", " ^ exp_to_string e ^ ")"
+   | (MATCH (exps, cases)) -> "MATCH(" ^ (list_to_string exp_to_string exps) ^ ", " ^ 
+                               (list_to_string 
+                                   (fun (ps, e) -> "(" ^ (list_to_string pattern_to_string ps) ^ ", " ^ exp_to_string e ^ ")")
+                                    cases)
+                               ^ ")"
+and value_to_string = function 
+   | (STRING s) -> "STRING(" ^ s ^ ")"
+   | (NUMBER n) -> "NUMBER(" ^ string_of_int n ^ ")"
+   | (BOOLV false) -> "BOOLV(false)"
+   | (BOOLV true) -> "BOOLV(true)"
+   | NIL -> "NIL"
+   | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
+   | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
+   | (PRIMITIVE f) -> "PRIM"
+   | _ -> "ERROR"
+
+and pattern_list_to_string = function 
+   | [] -> ""
+   | [x] -> pattern_to_string x
+   | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
 
 and pattern_to_string = function 
-    | (GENERIC x) -> x
-    | PATTERN (name, list) -> 
-        (match list with 
-        | [] ->  name
-        | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
-    | VALUE s -> s 
-
+   | (GENERIC x) -> x
+   | PATTERN (name, list) -> 
+       (match list with 
+       | [] ->  name
+       | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
+   | VALUE s -> value_to_string s
 let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
 
 let tuple_pattern list = PATTERN ("TUPLE", list)
@@ -327,7 +373,7 @@ let validate_parameters cases =
 (* let user_patterns = [(toilet (GENERIC "_") (GENERIC "_")); (toilet poo pee)] *)
 (* let user_patterns = [nil; (GENERIC "_")] *)
 
-(* let user_patterns = [(cons (PATTERN ("INT", [VALUE "56"])) (GENERIC "_")); (cons (GENERIC "_") (GENERIC "_")); nil] *)
+(* let user_patterns = [(cons (PATTERN ("INT", [VALUE (NUMBER 57)])) (GENERIC "_")); (cons (GENERIC "_") (GENERIC "_")); nil] *)
 
 (* let user_patterns = 
 [
@@ -341,8 +387,8 @@ let validate_parameters cases =
 (PATTERN ("TOILET", [tuple_pattern [PATTERN ("PEE", []);PATTERN ("POO", [])]]));
 (PATTERN ("TOILET", [tuple_pattern [PATTERN ("POO", []);PATTERN ("POO", [])]]))] *)
 (* let user_patterns = [(cons (GENERIC "_") (GENERIC "_")); nil] *)
-(* let user_patterns = [(PATTERN ("INT" ,[VALUE "3"])); GENERIC "x"] *)
-(* let user_patterns = [(cons (PATTERN ("STRING", [VALUE "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil] *)
+(* let user_patterns = [(PATTERN ("INT" ,[VALUE (NUMBER 3)])); GENERIC "x"] *)
+(* let user_patterns = [(cons (PATTERN ("STRING", [VALUE (STRING "890")])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil] *)
 (* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 
 (* 
@@ -368,3 +414,5 @@ let validate_parameters cases =
 (* let parameters = [[(GENERIC "_")]]  *)
 (* let parameters = [[(GENERIC "_"); (GENERIC "_")]] *)
 (* let _ = print_endline (string_of_bool (validate_parameters parameters)) *)
+
+(* let _ = print_endline (string_of_bool (pattern_covers (cons (PATTERN ("INT", [VALUE (NUMBER 3)])) nil) (cons (PATTERN ("INT", [VALUE (NUMBER 3)])) nil)) ) *)
