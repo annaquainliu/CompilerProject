@@ -58,10 +58,6 @@ let rec parse input =
     queue
     
 
-(* Expression/Definitions! *)
-
-type pattern = GENERIC of string
-            |  PATTERN of string * (pattern list)
 (* Patterns *)
 
 type exp = LITERAL of value
@@ -71,6 +67,7 @@ type exp = LITERAL of value
          | LAMBDA of string list * exp
          | LET of def list * exp
          | MATCH of exp list * ((pattern list) * exp) list
+         | TUPLE of (exp list)
 and value =    STRING of string 
             |  NUMBER of int
             |  BOOLV  of bool
@@ -78,9 +75,13 @@ and value =    STRING of string
             |  PAIR of value * value
             |  CLOSURE of exp * (string * value) list
             |  PRIMITIVE of (value list -> value)
+            |  TUPLEV of (value list)
 and def =  LETDEF of string * exp
          | LETREC of string * exp 
          | EXP of exp
+and pattern = GENERIC of string
+         |  VALUE of value 
+         |  PATTERN of string * (pattern list)
 
 (* Types! *)
 type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
@@ -93,19 +94,6 @@ let funtype (args, result) =
   CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
 
 type tyscheme = FORALL of string list * ty
-let rec pattern_list_to_string = function 
-    | [] -> ""
-    | [x] -> pattern_to_string x
-    | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
-
-and pattern_to_string = function 
-    | (GENERIC x) -> x
-    | PATTERN (name, list) -> 
-        (match list with 
-        | [] ->  name
-        | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
-
-let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
 
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
@@ -123,6 +111,7 @@ let rec def_to_string = function
                                         (fun (ps, e) -> "(" ^ (list_to_string pattern_to_string ps) ^ ", " ^ exp_to_string e ^ ")")
                                          cases)
                                     ^ ")"
+        | (TUPLE exps) -> "TUPLE(" ^ (list_to_string exp_to_string exps) ^ ")"
     and value_to_string = function 
         | (STRING s) -> "STRING(" ^ s ^ ")"
         | (NUMBER n) -> "NUMBER(" ^ string_of_int n ^ ")"
@@ -132,12 +121,36 @@ let rec def_to_string = function
         | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
         | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
         | (PRIMITIVE f) -> "PRIM"
+        | (TUPLEV l) -> "TUPLEV(" ^ (list_to_string value_to_string l) ^ ")"
         | _ -> "ERROR"
+and pattern_list_to_string = function 
+        | [] -> ""
+        | [x] -> pattern_to_string x
+        | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
+and pattern_to_string = function 
+        | (GENERIC x) -> x
+        | PATTERN (name, list) -> 
+            (match list with 
+            | [] ->  name
+            | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
+        | VALUE s -> value_to_string s
+let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
 (* 
   Takes in a queue of strings, and then tokenizes the result
 
   string queue -> def
 *)
+(* let tokenWhileDelim delim f queue = 
+    let rec tokenWhile () = 
+        let curr = Queue.pop queue in 
+        if curr = delim 
+            then []
+            else 
+                let exp = f curr in 
+                exp::(tokenWhile ())
+    in let list = tokenWhile () in 
+        (list, queue) *)
+
 let tokenize queue = 
     let rec tokenLambda () = 
         let rec tokenParams = function 
@@ -155,47 +168,40 @@ let tokenize queue =
         in  let bindings = tokenLetBindings (Queue.pop queue) in
             let exp = token (Queue.pop queue) in 
             LET (bindings, exp)
-      and tokenList = function
+    and tokenList = function
             | "]" -> NIL
             |  x  -> match token x with
                      | (LITERAL v) -> let rest = tokenList (Queue.pop queue) in 
                                       PAIR (v, rest)
                      | _  -> (raise (Ill_Typed "Cannot have non-values in list"))
-      and tokenApplyArgs = function 
-             | ")" -> []
-             |  x  -> let arg = token x in 
-                      let args = tokenApplyArgs (Queue.pop queue) in 
-                      arg::args
-      and tokenMatchExps = function 
+    and tokenMatchExps = function 
             | "with" -> []
             |  e     -> let exp = token e in exp::(tokenMatchExps (Queue.pop queue))
-      and tokenConsArgs = function 
+    and tokenConsArgs = function 
             | ")" -> []
             |  x  -> let arg = tokenPattern x in 
                      let args = tokenConsArgs (Queue.pop queue) in 
                      arg::args
-      and tokenPattern = function 
+    and tokenPattern = function 
             | "(" -> let name = Queue.pop queue in 
                     let cons_params = tokenConsArgs (Queue.pop queue) in 
                     let param = PATTERN (name, cons_params) in 
                     param
-            | "false" -> PATTERN ("BOOL", [GENERIC "false"])
-            | "true"  -> PATTERN ("BOOL", [GENERIC "true"])
+            | "false" -> PATTERN ("BOOL", [VALUE (BOOLV false)])
+            | "true"  -> PATTERN ("BOOL", [VALUE (BOOLV true)])
             | "\"" -> let p = PATTERN ("STRING", [GENERIC (Queue.pop queue)]) in 
                 let _   = Queue.pop queue in p
-            | x    -> (GENERIC x)
-      and tokenPatternParams = function 
-            | "="  -> []
-            | x    -> let p = (tokenPattern x) in 
-                      p::(tokenPatternParams (Queue.pop queue))
-      and tokenMatchCases () = 
+            | x    ->  if (Str.string_match (Str.regexp "[0-9]+") x 0) 
+                       then PATTERN ("INT", [VALUE (NUMBER (int_of_string x))])
+                       else (GENERIC x)
+    and tokenMatchCases () = 
             if (Queue.length queue) <> 0 && (Queue.peek queue) = "|"
             then let _ = Queue.pop queue in (* popping "|" *)
-                 let patterns = tokenPatternParams (Queue.pop queue) in 
+                 let patterns = tokenWhileDelim "=" tokenPattern in
                  let exp  = token (Queue.pop queue) in
                  (patterns, exp)::(tokenMatchCases ())
             else []
-      and token = function 
+    and token = function 
             | "fn"  -> tokenLambda ()
             | "let" -> tokenLetExp ()
             | "if"  -> let cond = token (Queue.pop queue) in 
@@ -206,7 +212,8 @@ let tokenize queue =
             | "("  -> let exp = token (Queue.pop queue) in 
                             (match exp with
                                 | (VAR _) | (APPLY _) | (LAMBDA _) -> 
-                                    (let args = tokenApplyArgs (Queue.pop queue) in APPLY (exp, args))
+                                    (let args = tokenWhileDelim ")" token
+                                     in APPLY (exp, args))
                                 |  _      -> let _ = Queue.pop queue in exp)
             | "match" -> let exps = tokenMatchExps (Queue.pop queue) in 
                          MATCH (exps, tokenMatchCases ())
@@ -214,10 +221,10 @@ let tokenize queue =
             | "true"  -> LITERAL (BOOLV true)
             | "\"" -> let exp = LITERAL (STRING (Queue.pop queue)) in 
                 let _   = Queue.pop queue in exp
-            |  str    ->  if (Str.string_match (Str.regexp "[0-9]+") str 0)
+            |  str ->  if (Str.string_match (Str.regexp "[0-9]+") str 0)
                             then LITERAL (NUMBER (int_of_string str))
                             else VAR str 
-      and tokenDef = function 
+    and tokenDef = function 
           | "val" -> tokenDef (Queue.pop queue)
           | "rec" -> let name = Queue.pop queue in 
                      let _ = Queue.pop queue in 
