@@ -246,6 +246,7 @@ let rec eval_exp exp rho =
         | (LET (defs, body)) -> 
             let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
+        | (TUPLE exps) -> TUPLEV (List.map eval exps)
         | m  -> (STRING (exp_to_string m))
     in eval exp  
 (* 
