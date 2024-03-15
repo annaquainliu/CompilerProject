@@ -79,6 +79,8 @@ and value =    STRING of string
             |  CLOSURE of exp * (string * value) list
             |  PRIMITIVE of (value list -> value)
             |  TUPLEV of (value list)
+            |  TYPECONS of (value list -> value)
+            |  PATTERNV of pattern
 and def =  LETDEF of string * exp
          | LETREC of string * exp 
          | EXP of exp
@@ -380,7 +382,7 @@ let tokenize queue =
             | "{" -> tuple_pattern (tokenWhileDelim "}" tokenPattern)
             | "false" -> PATTERN ("BOOL", [VALUE (BOOLV false)])
             | "true"  -> PATTERN ("BOOL", [VALUE (BOOLV true)])
-            | "\"" -> let p = PATTERN ("STRING", [GENERIC (Queue.pop queue)]) in 
+            | "\"" -> let p = PATTERN ("STRING", [VALUE (STRING (Queue.pop queue))]) in 
                 let _   = Queue.pop queue in p
             | x    ->  if (Str.string_match (Str.regexp "[0-9]+") x 0) 
                        then PATTERN ("INT", [VALUE (NUMBER (int_of_string x))])
@@ -512,7 +514,9 @@ let initial_rho =
     ("mod", math_primop (mod));
     ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
     ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
-    ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false))
+    ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false));
+    ("CONS", TYPECONS (fun arg -> match arg with [PATTERNV v] -> PATTERNV(PATTERN ("CONS", [v])) | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
+    ("NIL", TYPECONS (fun arg -> match arg with [] -> PATTERNV (PATTERN ("NIL", [])) | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
 
 let standard_lib = List.fold_left 
