@@ -42,7 +42,7 @@ let rec parse input =
     let rec extract input str = match input with 
         | "" -> ()
         | _  -> match input.[0] with 
-                | ' ' | ';' | '(' | ')' | '[' | ']' | ',' | '"' -> 
+                | ' ' | ';' | '(' | ')' | '[' | ']' | ',' | '"' | '{' | '}' -> 
                     let _ = if str <> "" then Queue.add str queue else () in 
                     let _ = if input.[0] <> ' ' then Queue.add (String.make 1 input.[0]) queue else () in 
                     if input.[0] = '"' 
@@ -201,6 +201,7 @@ let tokenize queue =
             | "true"  -> LITERAL (BOOLV true)
             | "\"" -> let exp = LITERAL (STRING (Queue.pop queue)) in 
                 let _   = Queue.pop queue in exp
+            | "{" -> TUPLE (tokenWhileDelim "}" token)
             |  str ->  if (Str.string_match (Str.regexp "[0-9]+") str 0)
                             then LITERAL (NUMBER (int_of_string str))
                             else VAR str 
