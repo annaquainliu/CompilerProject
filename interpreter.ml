@@ -140,51 +140,27 @@ let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to
 
   string queue -> def
 *)
-(* let tokenWhileDelim delim f queue = 
-    let rec tokenWhile () = 
-        let curr = Queue.pop queue in 
-        if curr = delim 
-            then []
-            else 
-                let exp = f curr in 
-                exp::(tokenWhile ())
-    in let list = tokenWhile () in 
-        (list, queue) *)
 
 let tokenize queue = 
-    let rec tokenLambda () = 
-        let rec tokenParams = function 
-                | "->"  -> []
-                | x     -> x::tokenParams (Queue.pop queue)
-        in 
-        let names = tokenParams (Queue.pop queue) in 
-        let exp  =  token (Queue.pop queue) in 
-        LAMBDA (names, exp)
-    and tokenLetExp () =
-        let rec tokenLetBindings = function 
-            | "in" -> []
-            |  name   -> let def = tokenDef name in 
-                            def::tokenLetBindings (Queue.pop queue)
-        in  let bindings = tokenLetBindings (Queue.pop queue) in
-            let exp = token (Queue.pop queue) in 
-            LET (bindings, exp)
-    and tokenList = function
+    let tokenWhileDelim delim f = 
+        let rec tokenWhile () = 
+            let curr = Queue.pop queue in 
+            if curr = delim 
+                then []
+                else 
+                    let exp = f curr in 
+                    exp::(tokenWhile ())
+        in tokenWhile ()
+    in 
+    let rec tokenList = function
             | "]" -> NIL
             |  x  -> match token x with
                      | (LITERAL v) -> let rest = tokenList (Queue.pop queue) in 
                                       PAIR (v, rest)
                      | _  -> (raise (Ill_Typed "Cannot have non-values in list"))
-    and tokenMatchExps = function 
-            | "with" -> []
-            |  e     -> let exp = token e in exp::(tokenMatchExps (Queue.pop queue))
-    and tokenConsArgs = function 
-            | ")" -> []
-            |  x  -> let arg = tokenPattern x in 
-                     let args = tokenConsArgs (Queue.pop queue) in 
-                     arg::args
     and tokenPattern = function 
             | "(" -> let name = Queue.pop queue in 
-                    let cons_params = tokenConsArgs (Queue.pop queue) in 
+                    let cons_params = tokenWhileDelim ")" tokenPattern in 
                     let param = PATTERN (name, cons_params) in 
                     param
             | "false" -> PATTERN ("BOOL", [VALUE (BOOLV false)])
@@ -202,8 +178,12 @@ let tokenize queue =
                  (patterns, exp)::(tokenMatchCases ())
             else []
     and token = function 
-            | "fn"  -> tokenLambda ()
-            | "let" -> tokenLetExp ()
+            | "fn"  ->  let names = tokenWhileDelim "->" (fun s -> s) in 
+                        let exp  =  token (Queue.pop queue) in 
+                        LAMBDA (names, exp)
+            | "let" -> let bindings = tokenWhileDelim "in" tokenDef in 
+                        let exp = token (Queue.pop queue) in 
+                        LET (bindings, exp)
             | "if"  -> let cond = token (Queue.pop queue) in 
                         let exp1 = token (Queue.pop queue) in 
                         let exp2 = token (Queue.pop queue) in 
@@ -215,7 +195,7 @@ let tokenize queue =
                                     (let args = tokenWhileDelim ")" token
                                      in APPLY (exp, args))
                                 |  _      -> let _ = Queue.pop queue in exp)
-            | "match" -> let exps = tokenMatchExps (Queue.pop queue) in 
+            | "match" -> let exps = tokenWhileDelim "with" token in 
                          MATCH (exps, tokenMatchCases ())
             | "false" -> LITERAL (BOOLV false)
             | "true"  -> LITERAL (BOOLV true)
