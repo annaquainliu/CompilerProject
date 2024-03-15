@@ -43,6 +43,10 @@ let tuple list = CONAPP (TYCON "tuple", list)
 let funtype (args, result) =
     CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
 
+type tyscheme = FORALL of string list * ty
+
+let degentype tau = FORALL ([], tau)
+
 let get_tycon_name = function 
     | (TYCON name) -> name 
     | _ -> raise (Ill_Typed "get_tycon_name")
@@ -120,17 +124,18 @@ let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_pa
                     ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns);
                     ("tuple", []); ("parameters", [])]
 
-let gamma = [("TOILET", (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); 
-            ("PEE", (funtype ([], TYCON "excrement"))); 
-            ("POO", (funtype ([], TYCON "excrement"))); 
-            ("GREET", (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
-            ("BYE", (funtype ([TYCON "toilet"], TYCON "hello")));
-            ("NIL", (funtype ([], TYCON "list")));
-            ("CONS", (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], (listty (TYVAR "'a")))));
-            ("INT", (funtype ([TYCON "int"], TYCON "int")));
-            ("STRING", (funtype ([TYCON "string"], TYCON "string")));
-            ("TUPLE", (funtype ([], TYCON "tuple")));
-            ("PARAMETERS", (funtype ([], TYCON "parameters")))]
+let gamma = [
+            ("TOILET", degentype (funtype ([tuple [TYCON "excrement"; TYCON "excrement"]], TYCON "toilet"))); 
+            ("PEE", degentype (funtype ([], TYCON "excrement"))); 
+            ("POO", degentype (funtype ([], TYCON "excrement"))); 
+            ("GREET", degentype (funtype ([tuple [TYCON "hello"; TYCON "hello"]], TYCON "hello")));
+            ("BYE", degentype (funtype ([TYCON "toilet"], TYCON "hello")));
+            ("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
+            ("CONS",  FORALL (["'a"], (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], (listty (TYVAR "'a"))))));
+            ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
+            ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
+            ("TUPLE", degentype (funtype ([], TYCON "tuple")));
+            ("PARAMETERS", degentype (funtype ([], TYCON "parameters")))]
 
 let rec lookup k = function 
             | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
@@ -222,13 +227,14 @@ let validate_patterns user_patterns datatypes gamma =
     string -> (pattern list)
 *)
 let rec get_constructors name =
-    let tau = lookup name gamma in
-    let name = match (get_fun_result tau) with 
-                 | (CONAPP (TYCON n, list)) -> n
-                 | TYCON n -> n
-                 | _          -> raise (Ill_Typed "Tried to get constructor name of a tyvar")
-    in 
-    lookup name datatypes 
+    match lookup name gamma with 
+        | FORALL (_, tau) -> 
+            (let name = 
+                (match (get_fun_result tau) with 
+                    | (CONAPP (TYCON n, list)) -> n
+                    | TYCON n -> n
+                    | _          -> raise (Ill_Typed "Tried to get constructor name of a tyvar"))
+            in lookup name datatypes)
 in
 (* 
 

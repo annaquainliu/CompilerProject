@@ -14,6 +14,9 @@ exception Ill_Typed of string
 exception Mismatch_Lengths
 exception Shadowing of string
 exception KindError of string
+exception Pattern_Matching_Not_Exhaustive of string 
+exception Pattern_Matching_Excessive of string
+exception Ill_Pattern of string 
 (* 
     Returns the value of a key in an association list
    'a -> ('a * 'b) list -> 'b
@@ -95,6 +98,8 @@ let funtype (args, result) =
 
 type tyscheme = FORALL of string list * ty
 
+let degentype tau = FORALL ([], tau)
+
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
@@ -135,6 +140,215 @@ and pattern_to_string = function
             | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
         | VALUE s -> value_to_string s
 let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
+
+
+(* 
+    
+    --- Patterns!  ---
+    
+*)
+let get_fun_result = function 
+    | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
+        result
+    | _ -> raise (Ill_Typed "get_fun_result")
+
+let tuple_pattern list = PATTERN ("TUPLE", list)
+let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [tuple_pattern [(GENERIC "_"); (GENERIC "_")]]))]
+let val_patterns = [(GENERIC "_")]
+
+let cons a b = PATTERN ("CONS",[(tuple_pattern [a;b])])
+let nil = PATTERN ("NIL", [])
+let parameters list = PATTERN ("PARAMETERS", list)
+(* 
+  Environment association list of names to list of constructors
+*)
+let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_patterns);
+                ("string", val_patterns);("tuple", []); ("parameters", [])]
+
+
+let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
+            ("CONS",  FORALL (["'a"], (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], (listty (TYVAR "'a"))))));
+            ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
+            ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
+            ("TUPLE", degentype (funtype ([], TYCON "tuple")));
+            ("PARAMETERS", degentype (funtype ([], TYCON "parameters")))]
+
+let rec double_list_all p list list' =
+    match list, list' with 
+        | [], [] -> true 
+        | (x::xs), (y::ys) -> (p x y) && double_list_all p xs ys
+        | _   -> raise (Ill_Pattern ("ill formed constructors when comparing " ^ 
+                            (list_to_string pattern_to_string list) ^ " " ^  
+                            (list_to_string pattern_to_string list')))
+
+let rec pattern_covers m m' = match m, m' with
+            | (GENERIC _), _       -> true
+            | (PATTERN (name, list)), (PATTERN (name', list')) ->
+                name = name' && (double_list_all pattern_covers list list')
+            | (VALUE s), (VALUE s')   -> s = s'
+            | _  -> false 
+(* 
+   Given a list of lists, compute the cartesian product
+
+    ('a list) list -> ('a list) list
+
+*)
+let rec cartesian_product input current_list result = 
+    match input with 
+        | []    -> current_list::result 
+        (* val fold_left : ('acc -> 'a -> 'acc) -> 'acc -> 'a list -> 'acc *)
+        | x::xs -> List.fold_left 
+                    (fun acc a -> cartesian_product xs (a::current_list) acc)
+                    result
+                    x
+
+let get_name = function 
+    | (PATTERN (name, _)) -> name
+    | _ -> raise (Ill_Pattern "Tried to get name of generic/value")
+(* 
+    Given an ideal pattern and a user pattern, splits
+    the ideal pattern into more ideal patterns.
+   
+    pattern -> pattern -> (pattern list) list
+
+    x :: ys covering {x :: y :: zs}
+    
+*)
+let rec equal_pattern p p' = 
+    match p, p' with 
+        | (GENERIC _), (GENERIC _) -> true
+        | (PATTERN (name, list), PATTERN (name', list')) -> name = name' && double_list_all equal_pattern list list'
+        | (VALUE s), (VALUE s') -> s = s'
+        | _ -> false
+
+(* 
+   Given an ideal and user patterns, returns a list of tuples
+    of matched ideal patterns to user patterns,
+   and the rest of the user_matches left over.
+*)
+let find_pairs ideals user_matches = 
+    List.fold_left
+        (fun (pairs, users) i -> 
+            if (not (List.exists (pattern_covers i) users)) 
+            then (pairs, users)
+            else let matched = List.find (pattern_covers i) users in 
+                    ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
+        ([], user_matches)
+        ideals
+
+(* 
+   Given user patterns and the current datatype environment,
+   return true if the user patterns are exhaustive, and 
+   throw an error otherwise.
+*)
+(* 
+    Algorithm:
+    pattern_exhaust ideal user_patterns : pattern list -> pattern list -> pattern list
+    *ideal begins as [GENERIC]
+    - Match each ideal[i] with the set of user patterns that ideal[i] covers. 
+            E.g, create a list of tuples <ideal, patterns>.
+    - Take first ideal and first user_pattern, and split by comparing each component of the pattern
+      until we see something that is more generic. Take this section of the pattern, compute
+      all patterns of the same generality, and rebuild pattern. 
+    - Remove equals
+    - Recurse on possible patterns and rest of user pattterns
+*)
+let validate_patterns user_patterns datatypes gamma = 
+(* 
+    Receives constructor names of the type with a constructor name
+    string -> (pattern list)
+*)
+let rec get_constructors name =
+    match lookup name gamma with 
+        | FORALL (_, tau) -> 
+            (let name = 
+                (match (get_fun_result tau) with 
+                    | (CONAPP (TYCON n, list)) -> n
+                    | TYCON n -> n
+                    | _          -> raise (Ill_Typed "Tried to get constructor name of a tyvar"))
+            in lookup name datatypes)
+in
+(* 
+
+    Given a pattern, compute all the possible patterns
+    that would exhaust the type on the same level
+    of generality.
+    
+    pattern -> (pattern list)
+    
+*)
+let rec all_possible_patterns = function 
+    | PATTERN (name, list) -> 
+        let constructors = List.filter (fun cons -> 
+                                            match cons with 
+                                                | (PATTERN (name', _)) -> not (name = name')
+                                                | _ -> true)
+                                    (get_constructors name) in 
+        let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
+        List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
+    | x              -> [x]
+in
+(* 
+   Splitting the ideal pattern into the generality 
+   of the user pattern, by breaking down the ideal 
+   pattern into a list of ideal patterns.
+
+   pattern -> pattern -> pattern list
+
+*)
+let rec splitting ideal user = (match ideal, user with  
+    | (GENERIC _), (PATTERN _) ->  all_possible_patterns user
+    | (PATTERN (name, list), PATTERN (name', list')) -> 
+        let ideals = map_ideals list list' in 
+        let product = cartesian_product ideals [] [] in
+        List.map (fun list -> (PATTERN (name, List.rev list))) product
+    | (GENERIC _), (GENERIC _) -> [GENERIC "_"]
+    | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split"))
+and
+(* Helper function for splitting *)
+map_ideals ideal_list user_list = (match ideal_list, user_list with 
+    | [], []           -> []
+    | (i::is), (u::us) -> splitting i u::(map_ideals is us)
+    | _, _             -> raise (Ill_Pattern "Mismatch constructor lists"))
+in 
+
+(* 
+   Given a list of ideal patterns and user patterns, 
+   returns true if the user patterns exhaust the ideal patterns,
+   and throws an error otheriwse.
+
+   [(cons (PATTERN ("STRING", [VALUE "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil]
+*)
+let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with 
+    | (i::is), [(GENERIC _)] -> true
+    | [], []      -> true 
+    | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
+    | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
+    | _, _ -> 
+        (* let _ = print_endline ((list_to_string pattern_to_string ideals) ^ (list_to_string pattern_to_string user_matches)) in *)
+        let (pairs, left_over_users) = find_pairs ideals user_matches in
+        let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
+        let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
+        let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
+        let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
+        let new_ideals = List.append left_over_ideals splitted in 
+        let new_users = List.append first_ideal_instances left_over_users in
+        pattern_exhaust new_ideals new_users)
+
+in pattern_exhaust [GENERIC "_"] user_patterns
+
+(* 
+   Given the parameters of a function in every case, and the
+   type of the function
+   determine if the cases are exhaustive.
+
+    (pattern list) list -> bool
+*)
+
+let validate_parameters cases = 
+    let patterns = List.map (fun list -> (parameters list)) cases in  
+    validate_patterns patterns datatypes gamma
+
 (* 
   Takes in a queue of strings, and then tokenizes the result
 
@@ -163,6 +377,7 @@ let tokenize queue =
                     let cons_params = tokenWhileDelim ")" tokenPattern in 
                     let param = PATTERN (name, cons_params) in 
                     param
+            | "{" -> tuple_pattern (tokenWhileDelim "}" tokenPattern)
             | "false" -> PATTERN ("BOOL", [VALUE (BOOLV false)])
             | "true"  -> PATTERN ("BOOL", [VALUE (BOOLV true)])
             | "\"" -> let p = PATTERN ("STRING", [GENERIC (Queue.pop queue)]) in 
