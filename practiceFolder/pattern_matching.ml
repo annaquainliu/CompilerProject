@@ -330,6 +330,7 @@ let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users, left_over_ideals) = find_pairs ideals user_matches in
+        let left_over_ideals = List.rev left_over_ideals in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
         let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
@@ -476,7 +477,9 @@ let validate_parameters cases =
         new_users = [[]]
 *)
 (* let user_patterns = [nil; nil; (cons (GENERIC "_") (GENERIC "_"))] *)
-(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
+(* let user_patterns = [tuple_pattern [VALUE (NUMBER 34); VALUE (NUMBER 56)]] *)
+(* let user_patterns = [VALUE (NUMBER 34)] *)
+let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
 
 (* 
 

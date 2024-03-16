@@ -179,7 +179,7 @@ let rec value_to_pattern = function
     | (TYPECONS s)    -> raise (Ill_Pattern ("Pattern matching on constructor requires application '()'. "))
     | v               -> (VALUE v)
 
-let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL)))))
+(* let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL))))) *)
 (* 
   Environment association list of names to list of constructors
 *)
@@ -238,7 +238,8 @@ let get_name = function
 let rec equal_pattern p p' = 
     match p, p' with 
         | (GENERIC _), (GENERIC _) -> true
-        | (PATTERN (name, list), PATTERN (name', list')) -> name = name' && double_list_all equal_pattern list list'
+        | (PATTERN (name, list), PATTERN (name', list')) -> 
+            name = name' && double_list_all equal_pattern list list'
         | (VALUE s), (VALUE s') -> s = s'
         | _ -> false
 (* 
