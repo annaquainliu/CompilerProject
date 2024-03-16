@@ -163,6 +163,23 @@ let val_patterns = [(GENERIC "_")]
 let cons a b = PATTERN ("CONS",[(tuple_pattern [a;b])])
 let nil = PATTERN ("NIL", [])
 let parameters list = PATTERN ("PARAMETERS", list)
+
+(* 
+   Given a value, converts it into a pattern
+
+   value -> pattern
+*)
+let rec value_to_pattern = function 
+    | TUPLEV (values) -> tuple_pattern (List.map value_to_pattern values)
+    | NIL             -> nil
+    | PAIR (v, vs)    -> cons (value_to_pattern v) (value_to_pattern vs)
+    | PATTERNV p      -> p
+    | (CLOSURE _) 
+    | (PRIMITIVE _)   -> raise (Ill_Pattern ("Cannot pattern match on a function."))
+    | (TYPECONS s)    -> raise (Ill_Pattern ("Pattern matching on constructor requires application '()'. "))
+    | v               -> (VALUE v)
+
+let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL)))))
 (* 
   Environment association list of names to list of constructors
 *)
@@ -411,12 +428,12 @@ let tokenize queue =
                     let param = PATTERN (name, cons_params) in 
                     param
             | "{" -> tuple_pattern (tokenWhileDelim "}" tokenPattern)
-            | "false" -> PATTERN ("BOOL", [VALUE (BOOLV false)])
-            | "true"  -> PATTERN ("BOOL", [VALUE (BOOLV true)])
-            | "\"" -> let p = PATTERN ("STRING", [VALUE (STRING (Queue.pop queue))]) in 
+            | "false" -> VALUE (BOOLV false)
+            | "true"  -> VALUE (BOOLV true)
+            | "\"" -> let p = VALUE (STRING (Queue.pop queue)) in 
                 let _   = Queue.pop queue in p
             | x    ->  if (Str.string_match (Str.regexp "[0-9]+") x 0) 
-                       then PATTERN ("INT", [VALUE (NUMBER (int_of_string x))])
+                       then VALUE (NUMBER (int_of_string x))
                        else (GENERIC x)
     and tokenMatchCases () = 
             if (Queue.length queue) <> 0 && (Queue.peek queue) = "|"
@@ -549,9 +566,10 @@ let initial_rho =
     ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false));
     ("CONS", TYPECONS (fun arg -> match arg with 
                                   [PATTERNV v] -> PATTERNV(PATTERN ("CONS", [v]))
-                                | [v]          -> PATTERNV(PATTERN ("CONS", [VALUE v]))
+                                | [v]          -> PATTERNV(PATTERN ("CONS", [(value_to_pattern v)]))
                                 | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
-    ("NIL", TYPECONS (fun arg -> match arg with [] -> PATTERNV (PATTERN ("NIL", [])) | _ -> raise (Ill_Pattern "NIL applied to args")))
+    ("NIL", TYPECONS (fun arg -> match arg with [] -> PATTERNV (PATTERN ("NIL", [])) 
+                                | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
 
 let standard_lib = List.fold_left 
