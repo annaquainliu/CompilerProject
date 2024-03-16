@@ -129,6 +129,8 @@ let rec def_to_string = function
         | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
         | (PRIMITIVE f) -> "PRIM"
         | (TUPLEV l) -> "TUPLEV(" ^ (list_to_string value_to_string l) ^ ")"
+        | (TYPECONS f) -> "TYPECONS"
+        | (PATTERNV v) -> "PATTERNV(" ^ pattern_to_string v ^ ")"
         | _ -> "ERROR"
 and pattern_list_to_string = function 
         | [] -> ""
@@ -455,6 +457,7 @@ let rec eval_exp exp rho =
                         let rho' = List.append (zip names values) copy_rho in 
                         eval_exp body rho'
                     | (PRIMITIVE f) -> f values
+                    | (TYPECONS f) -> f values
                     | _ -> raise (Ill_Typed "Cannot apply non-function."))
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
@@ -515,7 +518,10 @@ let initial_rho =
     ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
     ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
     ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false));
-    ("CONS", TYPECONS (fun arg -> match arg with [PATTERNV v] -> PATTERNV(PATTERN ("CONS", [v])) | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
+    ("CONS", TYPECONS (fun arg -> match arg with 
+                                  [PATTERNV v] -> PATTERNV(PATTERN ("CONS", [v]))
+                                | [v]          -> PATTERNV(PATTERN ("CONS", [VALUE v]))
+                                | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
     ("NIL", TYPECONS (fun arg -> match arg with [] -> PATTERNV (PATTERN ("NIL", [])) | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
 
