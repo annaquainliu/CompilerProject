@@ -195,9 +195,10 @@ let rec equal_pattern p p' =
 *)
 let list_find f xs = 
     let rec find = function 
-        | []    -> raise (Ill_Pattern "Find pattern Issue")
+        | []    -> ([], [])
         | y::ys -> if f y
-                   then (y, ys)
+                   then let (matched, rest) = find ys 
+                        in  (y::matched, rest) 
                    else let (matched, rest) = find ys 
                         in  (matched, y::rest)
     in find xs 
@@ -208,12 +209,12 @@ let list_find f xs =
 *)
 let find_pairs ideals user_matches = 
     List.fold_left
-        (fun (pairs, users) i -> 
+        (fun (pairs, users, left_over_ideals) i -> 
             if (not (List.exists (pattern_covers i) users)) 
-            then (pairs, users)
+            then (pairs, users, i::left_over_ideals)
             else let (matched, rest) = list_find (pattern_covers i) users in 
-                    ((i, matched)::pairs, rest)) 
-        ([], user_matches)
+                    ((i, matched)::pairs, rest, left_over_ideals)) 
+        ([], user_matches, [])
         ideals
 
 (* 
@@ -284,7 +285,8 @@ let rec splitting ideal user = (match ideal, user with
         let product = cartesian_product ideals [] [] in
         List.map (fun list -> (PATTERN (name, List.rev list))) product
     | (GENERIC _), (GENERIC _) -> [GENERIC "_"]
-    | (GENERIC _), (VALUE s)     -> [(VALUE s); (GENERIC "_");]
+    | (GENERIC _), (VALUE s)   -> [(VALUE s); (GENERIC "_");]
+    | (VALUE _), (VALUE _)     -> []
     | _, _             -> raise (Ill_Pattern ((pattern_to_string ideal) ^ " is more specific than " ^ (pattern_to_string user))))
 and
 (* Helper function for splitting *)
@@ -294,28 +296,30 @@ map_ideals ideal_list user_list = (match ideal_list, user_list with
     | _, _             -> raise (Ill_Pattern "Mismatch constructor lists"))
 in 
 
+let filter_out_valid_matches pairs = 
+    List.filter (fun (i, us) -> match us with 
+                    | [u] -> not (equal_pattern i u)
+                    | _   -> true) 
+            pairs
+in
 (* 
    Given a list of ideal patterns and user patterns, 
    returns true if the user patterns exhaust the ideal patterns,
    and throws an error otheriwse.
 
 *)
-let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with 
+let rec pattern_exhaust (ideals, user_matches) = (match (ideals, user_matches) with 
     | (i::is), [(GENERIC _)] -> true
-    | [], []      -> true 
+    | [], []       -> true 
     | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
-        let (pairs, left_over_users) = find_pairs ideals user_matches in
-        let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
-        let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
-        let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
-        let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
-        let new_ideals = List.append left_over_ideals splitted in 
-        let new_users = List.append first_ideal_instances left_over_users in
-        pattern_exhaust new_ideals new_users)
+        let (pairs, left_over_users, left_over_ideals) = find_pairs ideals user_matches in
+        let filtered_pairs = filter_out_valid_matches pairs in 
+        let exhaust_pairs = List.map (fun (i, us) -> ((splitting i (List.hd us)), us)) filtered_pairs in 
+        List.for_all pattern_exhaust exhaust_pairs && pattern_exhaust (left_over_ideals, left_over_users))
 
-in pattern_exhaust [GENERIC "_"] user_patterns
+in pattern_exhaust ([GENERIC "_"], user_patterns)
 
 
 (* 
@@ -410,7 +414,7 @@ let validate_parameters cases =
 (* let user_patterns = [(cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs")); nil] *)
 
 (* Pattern matchign excessive: "890"::x *)
-let user_patterns = [(cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs")); nil]
+(* let user_patterns = [(cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs")); nil] *)
 
 (* Pattern matching excessive: nil will never be reached! *)
 (* let user_patterns = [nil; nil; (cons (GENERIC "_") (GENERIC "_"))] *)
