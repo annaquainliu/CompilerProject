@@ -24,6 +24,7 @@ type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
 let intty = TYCON "int"
 let boolty = TYCON "bool"
 let strty = TYCON "string"
+let unitty = TYCON "unit"
 let listty t = CONAPP(TYCON "list", [t])
 let funtype (args, result) =
   CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
@@ -89,7 +90,7 @@ let compose (theta2, theta1) =
 let tyvarCt = ref 0
 
 let freshtyvar _ = let () = tyvarCt := !tyvarCt + 1
-  in TYVAR (String.cat String.empty (string_of_int !tyvarCt))
+  in TYVAR (string_of_int !tyvarCt)
 
 let ftvs tau = 
   let rec getftvs curSet t = match t with
@@ -151,7 +152,7 @@ let rec solve c = match c with
   | TRIVIAL      -> []
   | CONJ(c1, c2) -> 
       let t1 = solve c1 in
-      let t2 = solve c2 in
+      let t2 = solve (consubst t1 c2) in
       compose (t2, t1)
   | EQ(t1, t2) -> match (t1, t2) with
     | (TYVAR a, TYVAR _)  -> a --> t2
@@ -196,10 +197,12 @@ let rec typeof exp g =
   | STRING(_) -> (strty, TRIVIAL)
   | NUMBER(_) -> (intty, TRIVIAL)
   | BOOLV(_) -> (boolty, TRIVIAL)
+  | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
   | PAIR(e, v) -> 
     let (t1, c1) = infer e in
     let (t2, c2) = infer (LITERAL v) in
       (t2, c1 ^ c2 ^ (listty t1 ^^ t2))
+  | UNIT -> (unitty, TRIVIAL)
   | _ -> (boolty, TRIVIAL)
 
   and typesof es g = List.fold_left (fun (ts, c) e ->
@@ -268,22 +271,52 @@ let debugExpType e =
 
 
 
-(*type inference unit tests*)
 
-let () = let () = print_string "type1 is... " in printExpType (LITERAL (NUMBER 666))
+(*type inference sanity checks*)
+
+(* let () = let () = print_string "type1 is... " in printExpType (LITERAL (NUMBER 666))
 let () = let () = print_string "type2 is... " 
          in printExpType (IF (LITERAL(BOOLV true), LITERAL (NUMBER 420), LITERAL (NUMBER 666)))
 let () = let () = print_string "type3 is... " 
          in printExpType (IF (LITERAL(BOOLV true), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
 let () = let () = print_string "type4 (should fail) is... " 
-        in printExpType (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
+        in printExpType (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD"))) *)
 
 
 (*type inference debugging*)
 
-let () = let () = print_string "debug test1: " 
+(* let () = let () = print_string "debug test1: " 
         in debugExpType (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
 let wtf = 
   let (ty, c) = typeof (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD"))) ([], []) in
   solve c
-let wtf2 = let (ty, c) = typeof(NIL) in solve c
+let wtf2 = let (ty, c) = typeof(NIL) in solve c *)
+
+
+(*type inference unit testing*)
+
+let unitTestCt = ref 0
+
+let checkValidTypeInf e = 
+ let () = unitTestCt := !unitTestCt + 1 in
+ let (ty, c) = typeof e ([], []) in
+ try let _ = solve c in () with Cringe _ -> 
+  let () = print_string("failed test ") in print_endline(string_of_int !unitTestCt)
+
+let checkInvalidTypeInf e = 
+  let () = unitTestCt := !unitTestCt + 1 in
+  let (ty, c) = typeof e ([], []) in
+  try 
+    let _ = solve c in 
+      let () = print_string "failed test " in 
+      print_endline(string_of_int !unitTestCt) with Cringe _ -> ()
+
+let () = checkValidTypeInf (LITERAL(NUMBER 666))
+let () = checkInvalidTypeInf (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
+let () = checkValidTypeInf (IF (LITERAL(BOOLV true), LITERAL (NUMBER 420), LITERAL (NUMBER 666)))
+let () = checkValidTypeInf (LITERAL NIL)
+let () = checkValidTypeInf (LITERAL(PAIR(LITERAL(STRING "anthrax"), NIL)))
+
+let () = debugExpType (LITERAL (PAIR (LITERAL(STRING "anthrax"), PAIR(LITERAL(NUMBER 500), NIL))))
+let cringe = let (ty, c) = 
+    typeof(LITERAL (PAIR (LITERAL(STRING "anthrax"), PAIR(LITERAL(NUMBER 500), NIL)))) ([], []) in solve c
