@@ -120,7 +120,7 @@ let greet a b = PATTERN ("GREET", [tuple_pattern [a;b]])
 (* 
   Environment association list of names to list of constructors
 *)
-let datatypes = [("list", list_patterns); ("int", int_patterns);("bool", bool_patterns);("string", string_patterns); 
+let datatypes = [("list", list_patterns); 
                     ("toilet", toilet_patterns); ("excrement", excrement_patterns); ("hello", hello_patterns);
                     ("tuple", []); ("parameters", [])]
 
@@ -132,8 +132,6 @@ let gamma = [
             ("BYE", degentype (funtype ([TYCON "toilet"], TYCON "hello")));
             ("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
             ("CONS",  FORALL (["'a"], (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], (listty (TYVAR "'a"))))));
-            ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
-            ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
             ("TUPLE", degentype (funtype ([], TYCON "tuple")));
             ("PARAMETERS", degentype (funtype ([], TYCON "parameters")))]
 
@@ -188,7 +186,21 @@ let rec equal_pattern p p' =
         | (PATTERN (name, list), PATTERN (name', list')) -> name = name' && double_list_all equal_pattern list list'
         | (VALUE s), (VALUE s') -> s = s'
         | _ -> false
+(* 
+   Given a pattern x and a list of user patterns,
+   return the first occurrence of a pattern that covers x
+   and the rest of the list.
 
+   'a find_pattern : ('a -> bool) -> ('a list) -> 'a * ('a list)
+*)
+let list_find f xs = 
+    let rec find = function 
+        | []    -> raise (Ill_Pattern "Find pattern Issue")
+        | y::ys -> if f y
+                   then (y, ys)
+                   else let (matched, rest) = find ys 
+                        in  (matched, y::rest)
+    in find xs 
 (* 
    Given an ideal and user patterns, returns a list of tuples
     of matched ideal patterns to user patterns,
@@ -199,8 +211,8 @@ let find_pairs ideals user_matches =
         (fun (pairs, users) i -> 
             if (not (List.exists (pattern_covers i) users)) 
             then (pairs, users)
-            else let matched = List.find (pattern_covers i) users in 
-                    ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
+            else let (matched, rest) = list_find (pattern_covers i) users in 
+                    ((i, matched)::pairs, rest)) 
         ([], user_matches)
         ideals
 
@@ -254,6 +266,7 @@ let rec all_possible_patterns = function
                                     (get_constructors name) in 
         let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
         List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
+    | VALUE s        -> [(VALUE s); (GENERIC "_");]
     | x              -> [x]
 in
 (* 
@@ -271,7 +284,8 @@ let rec splitting ideal user = (match ideal, user with
         let product = cartesian_product ideals [] [] in
         List.map (fun list -> (PATTERN (name, List.rev list))) product
     | (GENERIC _), (GENERIC _) -> [GENERIC "_"]
-    | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split"))
+    | (GENERIC _), (VALUE s)     -> [(VALUE s); (GENERIC "_");]
+    | _, _             -> raise (Ill_Pattern ((pattern_to_string ideal) ^ " is more specific than " ^ (pattern_to_string user))))
 and
 (* Helper function for splitting *)
 map_ideals ideal_list user_list = (match ideal_list, user_list with 
@@ -285,7 +299,6 @@ in
    returns true if the user patterns exhaust the ideal patterns,
    and throws an error otheriwse.
 
-   [(cons (PATTERN ("STRING", [VALUE "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil]
 *)
 let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with 
     | (i::is), [(GENERIC _)] -> true
@@ -293,7 +306,6 @@ let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with
     | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
-        (* let _ = print_endline ((list_to_string pattern_to_string ideals) ^ (list_to_string pattern_to_string user_matches)) in *)
         let (pairs, left_over_users) = find_pairs ideals user_matches in
         let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
@@ -304,6 +316,7 @@ let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with
         pattern_exhaust new_ideals new_users)
 
 in pattern_exhaust [GENERIC "_"] user_patterns
+
 
 (* 
    Given the parameters of a function in every case, and the
@@ -393,9 +406,15 @@ let validate_parameters cases =
 (PATTERN ("TOILET", [tuple_pattern [PATTERN ("PEE", []);PATTERN ("POO", [])]]));
 (PATTERN ("TOILET", [tuple_pattern [PATTERN ("POO", []);PATTERN ("POO", [])]]))] *)
 (* let user_patterns = [(cons (GENERIC "_") (GENERIC "_")); nil] *)
-(* let user_patterns = [(PATTERN ("INT" ,[VALUE (NUMBER 3)])); GENERIC "x"] *)
-(* let user_patterns = [(cons (PATTERN ("STRING", [VALUE (STRING "890")])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil] *)
-(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
+(* let user_patterns = [VALUE (NUMBER 3); GENERIC "x"] *)
+(* let user_patterns = [(cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs")); nil] *)
+
+(* Pattern matchign excessive: "890"::x *)
+let user_patterns = [(cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (VALUE (STRING "890")) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs")); nil]
+
+(* Pattern matching excessive: nil will never be reached! *)
+(* let user_patterns = [nil; nil; (cons (GENERIC "_") (GENERIC "_"))] *)
+let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
 
 (* 
 
@@ -421,4 +440,4 @@ let validate_parameters cases =
 (* let parameters = [[(GENERIC "_"); (GENERIC "_")]] *)
 (* let _ = print_endline (string_of_bool (validate_parameters parameters)) *)
 
-(* let _ = print_endline (string_of_bool (pattern_covers (cons (PATTERN ("INT", [VALUE (NUMBER 3)])) nil) (cons (PATTERN ("INT", [VALUE (NUMBER 3)])) nil)) ) *)
+(* let _ = print_endline (string_of_bool (pattern_covers (cons (VALUE (NUMBER 3)) nil) (cons (VALUE (NUMBER 3)) nil)) ) *)
