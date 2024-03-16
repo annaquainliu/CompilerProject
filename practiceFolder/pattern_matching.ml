@@ -298,7 +298,10 @@ in
 
 let filter_out_valid_matches pairs = 
     List.filter (fun (i, us) -> match us with 
-                    | [u] -> not (equal_pattern i u)
+                    | [u]   -> not (equal_pattern i u)
+                    | u::x::us -> if (equal_pattern i u)
+                                  then raise (Ill_Pattern ((pattern_to_string x) ^ " will never be reached."))
+                                  else true 
                     | _   -> true) 
             pairs
 in
@@ -306,6 +309,19 @@ in
    Given a list of ideal patterns and user patterns, 
    returns true if the user patterns exhaust the ideal patterns,
    and throws an error otheriwse.
+
+   pattern_exhaust [G] [nil; nil; (cons g g)]
+   pairs = [(G, [nil; nil; (cons g g)])]
+   left_over_users = []
+   left_over_ideals = []
+
+   filtered_pairs = [(G, [nil; nil; (cons g g)])]
+   exhuast_pairs = [ ([(cons g g); nil], [nil; nil; (cons g g)])  ]
+
+   pattern_exhaust ([(cons g g); nil], [nil; nil; (cons g g)]) && true
+   pairs = [ ((cons g g), (cons g g))  (nil, [nil; nil]) ]
+   filtered_pairs = [(nil, [nil; nil])]
+
 
 *)
 let rec pattern_exhaust (ideals, user_matches) = (match (ideals, user_matches) with 
