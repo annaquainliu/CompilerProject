@@ -476,7 +476,7 @@ let validate_parameters cases =
         new_users = [[]]
 *)
 (* let user_patterns = [nil; nil; (cons (GENERIC "_") (GENERIC "_"))] *)
-let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 
 (* 
 

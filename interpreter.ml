@@ -224,7 +224,30 @@ let rec equal_pattern p p' =
         | (PATTERN (name, list), PATTERN (name', list')) -> name = name' && double_list_all equal_pattern list list'
         | (VALUE s), (VALUE s') -> s = s'
         | _ -> false
+(* 
+    Given a pattern and a list of patterns,
+    returns the duplicated pattern
+*)
+let rec duplicate_pattern = function 
+    | []    -> []
+    | x::xs -> if (List.exists (equal_pattern x) xs)
+               then [x]
+               else  duplicate_pattern xs
+(* 
+   Given a pattern x and a list of user patterns,
+   return the first occurrence of a pattern that covers x
+   and the rest of the list.
 
+   'a find_pattern : ('a -> bool) -> ('a list) -> 'a * ('a list)
+*)
+let list_find f xs = 
+    let rec find = function 
+        | []    -> raise (Ill_Pattern "Find pattern Issue")
+        | y::ys -> if f y
+                   then (y, ys)
+                   else let (matched, rest) = find ys 
+                        in  (matched, y::rest)
+    in find xs 
 (* 
    Given an ideal and user patterns, returns a list of tuples
     of matched ideal patterns to user patterns,
@@ -232,13 +255,14 @@ let rec equal_pattern p p' =
 *)
 let find_pairs ideals user_matches = 
     List.fold_left
-        (fun (pairs, users) i -> 
+        (fun (pairs, users, left_over_ideals) i -> 
             if (not (List.exists (pattern_covers i) users)) 
-            then (pairs, users)
-            else let matched = List.find (pattern_covers i) users in 
-                    ((i, matched)::pairs, List.filter (fun p -> (not (equal_pattern p matched))) users)) 
-        ([], user_matches)
+            then (pairs, users, i::left_over_ideals)
+            else let (matched, rest) = list_find (pattern_covers i) users in 
+                    ((i, matched)::pairs, rest, left_over_ideals)) 
+        ([], user_matches, [])
         ideals
+
 
 (* 
    Given user patterns and the current datatype environment,
@@ -272,15 +296,6 @@ let rec get_constructors name =
                     | _          -> raise (Ill_Typed "Tried to get constructor name of a tyvar"))
             in lookup name datatypes)
 in
-(* 
-
-    Given a pattern, compute all the possible patterns
-    that would exhaust the type on the same level
-    of generality.
-    
-    pattern -> (pattern list)
-    
-*)
 let rec all_possible_patterns = function 
     | PATTERN (name, list) -> 
         let constructors = List.filter (fun cons -> 
@@ -290,6 +305,7 @@ let rec all_possible_patterns = function
                                     (get_constructors name) in 
         let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
         List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
+    | VALUE s        -> [(VALUE s); (GENERIC "_");]
     | x              -> [x]
 in
 (* 
@@ -307,7 +323,9 @@ let rec splitting ideal user = (match ideal, user with
         let product = cartesian_product ideals [] [] in
         List.map (fun list -> (PATTERN (name, List.rev list))) product
     | (GENERIC _), (GENERIC _) -> [GENERIC "_"]
-    | _, _             -> raise (Ill_Pattern "ideal pattern is more specific than user's, can't be split"))
+    | (GENERIC _), (VALUE s)   -> [(VALUE s); (GENERIC "_");]
+    | (VALUE _), (VALUE _)     -> []
+    | _, _             -> raise (Ill_Pattern ((pattern_to_string ideal) ^ " is more specific than " ^ (pattern_to_string user))))
 and
 (* Helper function for splitting *)
 map_ideals ideal_list user_list = (match ideal_list, user_list with 
@@ -321,25 +339,36 @@ in
    returns true if the user patterns exhaust the ideal patterns,
    and throws an error otheriwse.
 
-   [(cons (PATTERN ("STRING", [VALUE "asd"])) (GENERIC "xs")); (cons (GENERIC "x") (GENERIC "xs"));nil]
+   pattern_exhaust [G] [nil; nil; (cons g g)]
+   pairs = [(G, [nil; nil; (cons g g)])]
+   left_over_users = []
+   left_over_ideals = []
+
+   filtered_pairs = [(G, [nil; nil; (cons g g)])]
+   exhuast_pairs = [ ([(cons g g); nil], [nil; nil; (cons g g)])  ]
+
+   pattern_exhaust ([(cons g g); nil], [nil; nil; (cons g g)]) && true
+   pairs = [ ((cons g g), (cons g g))  (nil, [nil; nil]) ]
+   filtered_pairs = [(nil, [nil; nil])]
+
+
 *)
-let rec pattern_exhaust ideals user_matches = (match ideals, user_matches with 
+let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with 
     | (i::is), [(GENERIC _)] -> true
-    | [], []      -> true 
+    | [], []       -> true 
     | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
-        (* let _ = print_endline ((list_to_string pattern_to_string ideals) ^ (list_to_string pattern_to_string user_matches)) in *)
-        let (pairs, left_over_users) = find_pairs ideals user_matches in
-        let left_over_ideals = List.filter (fun i -> not (List.exists (fun (i', p) -> equal_pattern i i') pairs)) ideals in
+        let (pairs, left_over_users, left_over_ideals) = find_pairs ideals user_matches in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
         let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
         let new_ideals = List.append left_over_ideals splitted in 
         let new_users = List.append first_ideal_instances left_over_users in
         pattern_exhaust new_ideals new_users)
-
-in pattern_exhaust [GENERIC "_"] user_patterns
+in match duplicate_pattern user_patterns with 
+    | [x] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " is repeated in your patterns."))
+    |  _ -> pattern_exhaust [GENERIC "_"] user_patterns
 
 (* 
    Given the parameters of a function in every case, and the
