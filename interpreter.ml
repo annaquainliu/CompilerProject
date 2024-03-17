@@ -179,6 +179,19 @@ let rec value_to_pattern = function
     | (TYPECONS s)    -> raise (Ill_Pattern ("Pattern matching on constructor requires application '()'. "))
     | v               -> (VALUE v)
 
+let rec pattern_to_value = function 
+    | (VALUE v)   -> v
+    | (GENERIC c) -> raise (Ill_Pattern ("Cannot transform a generic" ^ c ^ " to a value"))
+    | (PATTERN ("NIL", [])) -> NIL
+    | (PATTERN ("TUPLE", ps)) -> TUPLEV (List.map pattern_to_value ps) 
+    | (PATTERN ("CONS", ps)) -> 
+        (match ps with 
+            | [p] -> (match pattern_to_value p with 
+                    | (TUPLEV [v; vs]) -> PAIR (v, vs)
+                    | _                ->  raise (Ill_Pattern ("Ill formed CONS application.")))
+            |  _  -> raise (Ill_Pattern ("Ill formed CONS application.")))
+    |  p  -> (PATTERNV p)
+
 (* let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL))))) *)
 (* 
   Environment association list of names to list of constructors
@@ -474,6 +487,20 @@ let tokenize queue =
          else EXP (token (Queue.pop queue))
 
 (* 
+    Given a matched pattern and argument, return 
+    an association list of the parameters mapped to 
+    their corresponding value
+
+    pattern -> pattern -> (string * value)
+*)
+let rec extract_parameters p arg = match p, arg with 
+    | (VALUE _),   (VALUE _)   -> []
+    | (GENERIC x), _ -> [(x, pattern_to_value arg)]
+    | (PATTERN (_, ps)), (PATTERN (_, ps')) -> 
+        List.fold_left2 (fun acc p p' -> List.append (extract_parameters p p') acc) [] ps ps'
+    | _   -> raise (Ill_Pattern "Incorrectly matched patterns")
+
+(* 
    Given an expression and rho, compute the value it returns
 
    exp -> (string * value) list -> value
@@ -516,8 +543,10 @@ let rec eval_exp exp rho =
             then raise (Ill_Pattern ("Mismatched lengths in expressions and patterns in match expression."))
             else 
             let values = List.map eval exps in 
-            let exp_ps = List.map value_to_pattern values in 
-            STRING (list_to_string pattern_to_string exp_ps)
+            let args = parameters (List.map value_to_pattern values) in 
+            let (p, case) = List.find (fun (p, case) -> pattern_covers p args) ps in 
+            let env = extract_parameters p args in
+            eval_exp case (List.append env rho)
     in eval exp  
 (* 
    def -> (string * value) list -> (value * rho)
@@ -569,10 +598,9 @@ let initial_rho =
     ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
     ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false));
     ("CONS", TYPECONS (fun arg -> match arg with 
-                                  [PATTERNV v] -> PATTERNV(PATTERN ("CONS", [v]))
-                                | [v]          -> PATTERNV(PATTERN ("CONS", [(value_to_pattern v)]))
+                                | [TUPLEV [v; vs]] -> PAIR (v, vs)
                                 | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
-    ("NIL", TYPECONS (fun arg -> match arg with [] -> PATTERNV (PATTERN ("NIL", [])) 
+    ("NIL", TYPECONS (fun arg -> match arg with [] -> NIL
                                 | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
 
