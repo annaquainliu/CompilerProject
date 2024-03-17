@@ -588,7 +588,7 @@ let initial_rho =
                                    ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a = b)
                                  | ((BOOLV a)::(BOOLV b)::[])   -> BOOLV (a = b)
                                  | ((STRING a)::(STRING b)::[]) -> BOOLV (a = b)
-                                 | _        -> raise (Ill_Typed "Cannot apply = to non-primitives.")));
+                                 | _        -> raise (Ill_Typed "Cannot apply = to non primitives or mixed types")));
     ("-", math_primop (-));
     ("+", math_primop (+));
     ("/", math_primop (/));
@@ -600,7 +600,8 @@ let initial_rho =
     ("CONS", TYPECONS (fun arg -> match arg with 
                                 | [TUPLEV [v; vs]] -> PAIR (v, vs)
                                 | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
-    ("NIL", TYPECONS (fun arg -> match arg with [] -> NIL
+    ("NIL", TYPECONS (fun arg -> match arg with 
+                                | [] -> NIL
                                 | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
 
