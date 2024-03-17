@@ -59,34 +59,7 @@ let rec parse input =
                         else extract (pop_first_char input) (str ^ String.make 1 c) 
     in let _ = (extract input "") in 
     queue
-    
 
-(* Patterns *)
-
-type exp = LITERAL of value
-         | VAR of string 
-         | IF of exp * exp * exp
-         | APPLY of exp * exp list 
-         | LAMBDA of string list * exp
-         | LET of def list * exp
-         | MATCH of exp list * (pattern * exp) list
-         | TUPLE of (exp list)
-and value =    STRING of string 
-            |  NUMBER of int
-            |  BOOLV  of bool
-            |  NIL
-            |  PAIR of value * value
-            |  CLOSURE of exp * (string * value) list
-            |  PRIMITIVE of (value list -> value)
-            |  TUPLEV of (value list)
-            |  TYPECONS of (value list -> value)
-            |  PATTERNV of pattern
-and def =  LETDEF of string * exp
-         | LETREC of string * exp 
-         | EXP of exp
-and pattern = GENERIC of string
-         |  VALUE of value 
-         |  PATTERN of string * (pattern list)
 
 (* Types! *)
 type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
@@ -101,15 +74,51 @@ let funtype (args, result) =
 type tyscheme = FORALL of string list * ty
 
 let degentype tau = FORALL ([], tau)
-
 type constructor = UNARYCONS of string * ty
                 |  NULLCONS of string 
-type datatype = ADT of string * (constructor list)
+let rec type_to_string = function
+    | TYVAR(a) -> "'" ^ a
+    | TYCON(c) -> c
+    | CONAPP(tc, taus) ->
+         "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
+
+type exp = LITERAL of value
+        | VAR of string 
+        | IF of exp * exp * exp
+        | APPLY of exp * exp list 
+        | LAMBDA of string list * exp
+        | LET of def list * exp
+        | MATCH of exp list * (pattern * exp) list
+        | TUPLE of (exp list)
+and value = STRING of string 
+        |  NUMBER of int
+        |  BOOLV  of bool
+        |  NIL
+        |  PAIR of value * value
+        |  CLOSURE of exp * (string * value) list
+        |  PRIMITIVE of (value list -> value)
+        |  TUPLEV of (value list)
+        |  TYPECONS of (value list -> value)
+        |  PATTERNV of pattern
+and def =  LETDEF of string * exp
+        | LETREC of string * exp 
+        | EXP of exp
+        | ADT of string * (constructor list)
+and pattern = GENERIC of string
+        |  VALUE of value 
+        |  PATTERN of string * (pattern list)
+
+let cons_to_string = function 
+    | (UNARYCONS (name, tau)) -> "UNARYCONS(" ^ name ^ ", " ^ type_to_string tau ^ ")"
+    | (NULLCONS name) -> "NULLCONS(" ^ name ^ ")" 
 
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (EXP e) -> "EXP(it, " ^ exp_to_string e ^ ")"
+         | (ADT (name, cons)) -> "ADT(" ^ name ^ ", "
+                                 ^ (list_to_string cons_to_string cons)
+                                 ^ ")"
     and exp_to_string = function 
         | (LITERAL v) -> value_to_string v
         | (VAR s) -> "VAR(" ^ s ^ ")"
@@ -148,7 +157,6 @@ and pattern_to_string = function
             | _  ->  name ^ "(" ^ pattern_list_to_string list ^ ")")
         | VALUE s -> value_to_string s
 let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
-
 
 (* 
     
@@ -205,7 +213,7 @@ let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_pat
 
 
 let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
-            ("CONS",  FORALL (["'a"], (funtype ([(TYVAR "'a"); (listty (TYVAR "'a"))], (listty (TYVAR "'a"))))));
+            ("CONS",  FORALL (["'a"], (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
             ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
             ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
             ("TUPLE", degentype (funtype ([], TYCON "tuple")));
@@ -425,6 +433,27 @@ let tokenize queue =
                     exp::(tokenWhile ())
         in tokenWhile ()
     in 
+    let rec tokenType = function 
+        | "(" -> let tau = TYCON (Queue.pop queue) in 
+                 let taus = tokenWhileDelim ")" tokenType in 
+                 CONAPP (tau, taus)
+        |  tau  -> if tau.[0] = '\''
+                   then TYVAR (pop_first_char tau)
+                   else TYCON tau  
+    in 
+    let rec tokenADT () = 
+        let name = Queue.pop queue in 
+        let cons =
+            if (Queue.length queue <> 0) && (Queue.peek queue) = "of" 
+            then let _ = Queue.pop queue in 
+                 UNARYCONS (name, tokenType (Queue.pop queue))
+            else NULLCONS (name)
+        in 
+        if (Queue.length queue <> 0) && (Queue.peek queue) = "|" 
+        then let _ = Queue.pop queue in (* for | *)
+             cons::(tokenADT ())
+        else [cons] 
+    in 
     let rec tokenList = function
             | "]" -> NIL
             |  x  -> match token x with
@@ -480,15 +509,18 @@ let tokenize queue =
                             then LITERAL (NUMBER (int_of_string str))
                             else VAR str 
     and tokenDef = function 
-          | "val" -> tokenDef (Queue.pop queue)
-          | "rec" -> let name = Queue.pop queue in 
-                     let _ = Queue.pop queue in 
-                     let keyword = Queue.pop queue in
-                     LETREC (name, token keyword)
-          |  name -> let _ = Queue.pop queue in LETDEF (name, token (Queue.pop queue))
-      in if (Queue.peek queue) = "val" 
-         then tokenDef (Queue.pop queue)
-         else EXP (token (Queue.pop queue))
+            | "val" ->  let key = Queue.pop queue in 
+                        if key = "rec"
+                        then let name = Queue.pop queue in 
+                             let _ = Queue.pop queue in (* for = *)
+                             LETREC (name, token (Queue.pop queue))
+                        else let _ = Queue.pop queue in (* for = *)
+                            LETDEF (key, token (Queue.pop queue))
+            | "datatype" -> let name = Queue.pop queue in 
+                            let _ = Queue.pop queue in (* For '=' *)
+                            ADT (name, tokenADT ())
+          |  name -> EXP (token (name))
+      in tokenDef (Queue.pop queue)
 
 (* 
     Given a matched pattern and argument, return 
@@ -562,16 +594,19 @@ and eval_def def rho =
             then raise (Shadowing  "LETDEF")
             else let value = eval_exp exp rho in 
                 (value, (name, value)::rho)
-        | LETREC (name, exp) ->
-            if List.exists (fun n -> n = name) (List.map fst rho) 
-            then raise (Shadowing "LETREC")
-            else let closure = eval_exp exp rho 
-                  in (match closure with 
-                        | (CLOSURE (LAMBDA (args, e), c)) -> 
-                            let rec rho' = (name, (CLOSURE (LAMBDA (args, e), rho')))::rho in 
-                            ((CLOSURE (LAMBDA (args, e), rho')), rho')
-                        |  _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
+        | LETREC (name, exp) -> (match exp with 
+            | (LAMBDA _) -> 
+                if List.exists (fun n -> n = name) (List.map fst rho) 
+                then raise (Shadowing "LETREC")
+                else let closure = eval_exp exp rho 
+                    in (match closure with 
+                            | (CLOSURE (l, c)) -> 
+                                let rec rho' = (name, (CLOSURE (l, rho')))::rho in 
+                                ((CLOSURE (l, rho')), rho')
+                            |  _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
+            | _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
         | EXP e -> eval_def (LETDEF ("it", e)) rho
+        | ADT (name, cons) -> (STRING (def_to_string def), rho)
 
 let math_primop fn = PRIMITIVE (fun xs -> match xs with
                                     ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)

@@ -479,7 +479,7 @@ let validate_parameters cases =
 (* let user_patterns = [nil; nil; (cons (GENERIC "_") (GENERIC "_"))] *)
 (* let user_patterns = [tuple_pattern [VALUE (NUMBER 34); VALUE (NUMBER 56)]] *)
 (* let user_patterns = [VALUE (NUMBER 34)] *)
-let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 
 (* 
 
