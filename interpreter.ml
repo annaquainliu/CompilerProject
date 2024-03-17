@@ -11,6 +11,7 @@ let list_to_string f xs =
 
 exception Not_Found of string
 exception Ill_Typed of string 
+exception Runtime_Error of string 
 exception Mismatch_Lengths
 exception Shadowing of string
 exception KindError of string
@@ -535,6 +536,29 @@ let rec extract_parameters p arg = match p, arg with
     | (PATTERN (_, ps)), (PATTERN (_, ps')) -> 
         List.fold_left2 (fun acc p p' -> List.append (extract_parameters p p') acc) [] ps ps'
     | _   -> raise (Ill_Pattern "Incorrectly matched patterns")
+(* 
+   Given a constructor, create a binding of the constructor in rho
+
+   constructor -> string * value
+*)
+let rec eval_cons = function 
+    | UNARYCONS (name, _) ->
+        (name, 
+        TYPECONS (fun args -> match args with 
+                    | [PATTERNV v]  -> PATTERNV (PATTERN (name, [v]))
+                    | [v]     -> PATTERNV (PATTERN (name, [VALUE v]))
+                    |  _   -> raise (Runtime_Error 
+                                        ("Applied " ^ name ^ " constructor with "
+                                         ^ (string_of_int (List.length args)) ^ 
+                                         "arguments. Expected 1 argument."))))
+    | NULLCONS name -> 
+        (name, 
+        TYPECONS (fun args -> match args with 
+                    | []  -> PATTERNV (PATTERN (name, []))
+                    |  _   -> raise (Runtime_Error 
+                                        ("Applied " ^ name ^ " constructor with " 
+                                          ^ (string_of_int (List.length args)) ^ 
+                                          "arguments. Expected 0 arguments."))))
 
 (* 
    Given an expression and rho, compute the value it returns
@@ -606,7 +630,10 @@ and eval_def def rho =
                             |  _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
             | _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
         | EXP e -> eval_def (LETDEF ("it", e)) rho
-        | ADT (name, cons) -> (STRING (def_to_string def), rho)
+        | ADT (name, cons) -> 
+            let bindings = List.map eval_cons cons in
+            let rho' = List.append bindings rho in 
+            (STRING (name), rho')
 
 let math_primop fn = PRIMITIVE (fun xs -> match xs with
                                     ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)
