@@ -102,6 +102,10 @@ type tyscheme = FORALL of string list * ty
 
 let degentype tau = FORALL ([], tau)
 
+type constructor = UNARYCONS of string * ty
+                |  NULLCONS of string 
+type datatype = ADT of string * (constructor list)
+
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
