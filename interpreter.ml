@@ -69,7 +69,7 @@ type exp = LITERAL of value
          | APPLY of exp * exp list 
          | LAMBDA of string list * exp
          | LET of def list * exp
-         | MATCH of exp list * ((pattern list) * exp) list
+         | MATCH of exp list * (pattern * exp) list
          | TUPLE of (exp list)
 and value =    STRING of string 
             |  NUMBER of int
@@ -115,7 +115,7 @@ let rec def_to_string = function
         | (LET (ds, e)) -> "LET(" ^ list_to_string def_to_string ds ^ ", " ^ exp_to_string e ^ ")"
         | (MATCH (exps, cases)) -> "MATCH(" ^ (list_to_string exp_to_string exps) ^ ", " ^ 
                                     (list_to_string 
-                                        (fun (ps, e) -> "(" ^ (list_to_string pattern_to_string ps) ^ ", " ^ exp_to_string e ^ ")")
+                                        (fun (p, e) -> "(" ^ (pattern_to_string p) ^ ", " ^ exp_to_string e ^ ")")
                                          cases)
                                     ^ ")"
         | (TUPLE exps) -> "TUPLE(" ^ (list_to_string exp_to_string exps) ^ ")"
@@ -378,27 +378,18 @@ let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with
     | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users, left_over_ideals) = find_pairs ideals user_matches in
+        let left_over_ideals = List.rev left_over_ideals in
         let filtered_non_equals = List.filter (fun (a, b) -> not (equal_pattern a b)) pairs in
         let first_ideal_instances = List.map (fun (a, b) -> b) filtered_non_equals in
         let splitted = List.fold_left (fun acc (i, p) -> List.append (splitting i p) acc) [] filtered_non_equals in
         let new_ideals = List.append left_over_ideals splitted in 
         let new_users = List.append first_ideal_instances left_over_users in
         pattern_exhaust new_ideals new_users)
+
 in match duplicate_pattern user_patterns with 
     | [x] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " is repeated in your patterns."))
     |  _ -> pattern_exhaust [GENERIC "_"] user_patterns
 
-(* 
-   Given the parameters of a function in every case, and the
-   type of the function
-   determine if the cases are exhaustive.
-
-    (pattern list) list -> bool
-*)
-
-let validate_parameters cases = 
-    let patterns = List.map (fun list -> (parameters list)) cases in  
-    validate_patterns patterns datatypes gamma
 
 (* 
   Takes in a queue of strings, and then tokenizes the result
@@ -441,7 +432,7 @@ let tokenize queue =
             then let _ = Queue.pop queue in (* popping "|" *)
                  let patterns = tokenWhileDelim "=" tokenPattern in
                  let exp  = token (Queue.pop queue) in
-                 (patterns, exp)::(tokenMatchCases ())
+                 (parameters patterns, exp)::(tokenMatchCases ())
             else []
     and token = function 
             | "fn"  ->  let names = tokenWhileDelim "->" (fun s -> s) in 
@@ -514,7 +505,19 @@ let rec eval_exp exp rho =
             let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
         | (TUPLE exps) -> TUPLEV (List.map eval exps)
-        | m  -> (STRING (exp_to_string m))
+        | (MATCH (exps, ps)) -> 
+            let valid_lengths = List.for_all (fun (p, e) -> 
+                                match p with 
+                                | (PATTERN ("PARAMETERS", l)) -> (List.length l) = (List.length exps)
+                                | _ -> raise (Ill_Pattern ("Ill formed pattern parameters"))) 
+                            ps
+            in 
+            if (not valid_lengths)
+            then raise (Ill_Pattern ("Mismatched lengths in expressions and patterns in match expression."))
+            else 
+            let values = List.map eval exps in 
+            let exp_ps = List.map value_to_pattern values in 
+            STRING (list_to_string pattern_to_string exp_ps)
     in eval exp  
 (* 
    def -> (string * value) list -> (value * rho)
