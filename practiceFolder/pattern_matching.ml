@@ -193,7 +193,7 @@ let rec equal_pattern p p' =
 let rec duplicate_pattern = function 
     | []    -> []
     | x::xs -> if (List.exists (equal_pattern x) xs)
-               then [x]
+               then [List.find (equal_pattern x) xs]
                else  duplicate_pattern xs
 (* 
    Given a pattern x and a list of user patterns,
@@ -224,6 +224,13 @@ let find_pairs ideals user_matches =
                     ((i, matched)::pairs, rest, left_over_ideals)) 
         ([], user_matches, [])
         ideals
+(* 
+   Given a pattern, returns true if the pattern contains a value
+*)
+let rec contains_value = function 
+    | (GENERIC _) -> false
+    | (VALUE _) -> true
+    | (PATTERN (_, list)) -> List.exists contains_value list
 
 (* 
    Given user patterns and the current datatype environment,
@@ -275,7 +282,7 @@ let rec all_possible_patterns = function
                                     (get_constructors name) in 
         let product = cartesian_product (List.map all_possible_patterns list) [] [] in 
         List.append (List.map (fun list' -> PATTERN (name, List.rev list')) product) constructors
-    | VALUE s        -> [(VALUE s); (GENERIC "_");]
+    | VALUE s        -> [(GENERIC "_");]
     | x              -> [x]
 in
 (* 
@@ -287,7 +294,10 @@ in
 
 *)
 let rec splitting ideal user = (match ideal, user with  
-    | (GENERIC _), (PATTERN _) ->  all_possible_patterns user
+    | (GENERIC _), (PATTERN _) ->  
+        if (contains_value user) 
+        then user::(all_possible_patterns user)
+        else (all_possible_patterns user)
     | (PATTERN (name, list), PATTERN (name', list')) -> 
         let ideals = map_ideals list list' in 
         let product = cartesian_product ideals [] [] in
@@ -338,7 +348,7 @@ let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with
         let new_users = List.append first_ideal_instances left_over_users in
         pattern_exhaust new_ideals new_users)
 in match duplicate_pattern user_patterns with 
-    | [x] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " is repeated in your patterns."))
+    | [x] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
     |  _ -> pattern_exhaust [GENERIC "_"] user_patterns
 
 
@@ -354,7 +364,6 @@ let validate_parameters cases =
     let patterns = List.map (fun list -> (parameters list)) cases in  
     validate_patterns patterns datatypes gamma
     
-
 (*
     UNIT TESTS!
 *)
@@ -478,8 +487,30 @@ let validate_parameters cases =
 *)
 (* let user_patterns = [nil; nil; (cons (GENERIC "_") (GENERIC "_"))] *)
 (* let user_patterns = [tuple_pattern [VALUE (NUMBER 34); VALUE (NUMBER 56)]] *)
+
+(* 
+   pattern_exhaust [G], [(34, 45); (_, _)]
+        pairs = [(G, (34, 45))]
+        left_over_users = [(_, _)]
+        left_over_ideals = []
+        non_equals =  [(G, (34, 45))]
+        splitted = [(_, _)]
+        new_ideals = [(_, _)]
+        new_users = [(34, 45), (_, _)]
+    Trick: We need to generate an ideal pattern at the same level of specificity of a value, or the user
+    pattern will never be matched and removed.
+*)
+(* let user_patterns = [(tuple_pattern [VALUE (NUMBER 34); VALUE (NUMBER 45)]); (tuple_pattern [(GENERIC "_"); (GENERIC "_")])] *)
+(* let user_patterns = [(tuple_pattern [VALUE (NUMBER 5); (GENERIC "x")]); (GENERIC "_")] *)
+(* Expect Error: "TUPLE(NUMBER(5), x) will never be reached." *)
+(* let user_patterns = [(GENERIC "_"); (tuple_pattern [VALUE (NUMBER 5); (GENERIC "x")]);] *)
+
+(* let user_patterns = [(tuple_pattern [VALUE (NUMBER 3)]); (tuple_pattern [(GENERIC "x")])] *)
+(* let user_patterns = [(tuple_pattern [VALUE (NUMBER 3); (GENERIC "_")]); (tuple_pattern [(GENERIC "X"); (GENERIC "X")]); ] *)
+let user_patterns = [(tuple_pattern [(GENERIC "X"); (GENERIC "X")]); (tuple_pattern [(GENERIC "Z"); (GENERIC "y")]);]
 (* let user_patterns = [VALUE (NUMBER 34)] *)
-(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
+(* let user_patterns = [(GENERIC "_")] *)
+let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
 
 (* 
 

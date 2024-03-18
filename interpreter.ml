@@ -326,7 +326,14 @@ let find_pairs ideals user_matches =
         ([], user_matches, [])
         ideals
 
-
+(* 
+   Given a pattern, returns true if the pattern contains a value
+*)
+   let rec contains_value = function 
+   | (GENERIC _) -> false
+   | (VALUE _) -> true
+   | (PATTERN (_, list)) -> List.exists contains_value list
+   
 (* 
    Given user patterns and the current datatype environment,
    return true if the user patterns are exhaustive, and 
@@ -380,7 +387,10 @@ in
 
 *)
 let rec splitting ideal user = (match ideal, user with  
-    | (GENERIC _), (PATTERN _) ->  all_possible_patterns user
+    | (GENERIC _), (PATTERN _) ->  
+        if (contains_value user) 
+        then user::(all_possible_patterns user)
+        else (all_possible_patterns user)
     | (PATTERN (name, list), PATTERN (name', list')) -> 
         let ideals = map_ideals list list' in 
         let product = cartesian_product ideals [] [] in
