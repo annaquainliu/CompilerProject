@@ -508,7 +508,7 @@ let tokenize queue =
             then let _ = Queue.pop queue in (* popping "|" *)
                  let patterns = tokenWhileDelim "=" tokenPattern in
                  let exp  = token (Queue.pop queue) in
-                 (parameters patterns, exp)::(tokenMatchCases ())
+                  (tuple_pattern patterns, exp)::(tokenMatchCases ())
             else []
     and token = function 
             | "fn"  ->  let names = tokenWhileDelim "->" (fun s -> s) in 
@@ -623,7 +623,7 @@ let rec eval_exp exp rho =
         | (MATCH (exps, ps)) -> 
             let valid_lengths = List.for_all (fun (p, e) -> 
                                 match p with 
-                                | (PATTERN ("PARAMETERS", l)) -> (List.length l) = (List.length exps)
+                                | (PATTERN ("TUPLE", l)) -> (List.length l) = (List.length exps)
                                 | _ -> raise (Ill_Pattern ("Ill formed pattern parameters"))) 
                             ps
             in 
@@ -631,7 +631,7 @@ let rec eval_exp exp rho =
             then raise (Ill_Pattern ("Mismatched lengths in expressions and patterns in match expression."))
             else 
             let values = List.map eval exps in 
-            let args = parameters (List.map value_to_pattern values) in 
+            let args = tuple_pattern (List.map value_to_pattern values) in 
             let (p, case) = List.find (fun (p, case) -> pattern_covers p args) ps in 
             let env = extract_parameters p args in
             eval_exp case (List.append env rho)
