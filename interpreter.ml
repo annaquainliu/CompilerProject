@@ -104,7 +104,7 @@ and value = STRING of string
 and def =  LETDEF of string * exp
         | LETREC of string * exp 
         | EXP of exp
-        | ADT of string * (constructor list)
+        | ADT of string * string list * (constructor list)
 and pattern = GENERIC of string
         |  VALUE of value 
         |  PATTERN of string * (pattern list)
@@ -117,7 +117,8 @@ let rec def_to_string = function
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (EXP e) -> "EXP(it, " ^ exp_to_string e ^ ")"
-         | (ADT (name, cons)) -> "ADT(" ^ name ^ ", "
+         | (ADT (name, tyvars, cons)) -> "ADT(" ^ name ^ ", "
+                                 ^ (list_to_string (fun s -> s) tyvars) ^ ", "
                                  ^ (list_to_string cons_to_string cons)
                                  ^ ")"
     and exp_to_string = function 
@@ -180,18 +181,35 @@ let parameters list = PATTERN ("PARAMETERS", list)
 (* 
    Given a value, converts it into a pattern
 
+   Used to pattern match values of expressions on patterns.
+
    value -> pattern
 *)
 let rec value_to_pattern = function 
     | TUPLEV (values) -> tuple_pattern (List.map value_to_pattern values)
     | NIL             -> nil
     | PAIR (v, vs)    -> cons (value_to_pattern v) (value_to_pattern vs)
-    | PATTERNV p      -> p
+    | PATTERNV p  -> p_vals_to_p p
     | (CLOSURE _) 
     | (PRIMITIVE _)   -> raise (Ill_Pattern ("Cannot pattern match on a function."))
     | (TYPECONS s)    -> raise (Ill_Pattern ("Pattern matching on constructor requires application '()'. "))
     | v               -> (VALUE v)
+and 
+(* 
+   Extracts the values from patterns and transforms them into
+   patterns
 
+   pattern -> pattern
+*)
+p_vals_to_p = function
+    | (PATTERN (name, list)) -> (PATTERN (name, List.map p_vals_to_p list))
+    | (VALUE v)  -> value_to_pattern v
+    | _          -> raise (Ill_Pattern "Generic is not a valid pattern value.")
+(* 
+   Given a pattern, converts it into a value
+    
+   Used to extract value of generics in pattern matching.
+*)
 let rec pattern_to_value = function 
     | (VALUE v)   -> v
     | (GENERIC c) -> raise (Ill_Pattern ("Cannot transform a generic" ^ c ^ " to a value"))
@@ -206,6 +224,7 @@ let rec pattern_to_value = function
     |  p  -> (PATTERNV p)
 
 (* let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL))))) *)
+(* let _ = print_endline (pattern_to_string (value_to_pattern (PATTERNV (PATTERN ("twice", [VALUE (TUPLEV [(PATTERNV (PATTERN ("ZERO", []))); PATTERNV (PATTERN ("ONEBIT", []))])]))))) *)
 (* 
   Environment association list of names to list of constructors
 *)
@@ -518,8 +537,8 @@ let tokenize queue =
                         else let _ = Queue.pop queue in (* for = *)
                             LETDEF (key, token (Queue.pop queue))
             | "datatype" -> let name = Queue.pop queue in 
-                            let _ = Queue.pop queue in (* For '=' *)
-                            ADT (name, tokenADT ())
+                            let tyvars = tokenWhileDelim "=" (fun s -> s) in 
+                            ADT (name, tyvars, tokenADT ())  
           |  name -> EXP (token (name))
       in tokenDef (Queue.pop queue)
 
@@ -545,7 +564,6 @@ let rec eval_cons = function
     | UNARYCONS (name, _) ->
         (name, 
         TYPECONS (fun args -> match args with 
-                    | [PATTERNV v]  -> PATTERNV (PATTERN (name, [v]))
                     | [v]     -> PATTERNV (PATTERN (name, [VALUE v]))
                     |  _   -> raise (Runtime_Error 
                                         ("Applied " ^ name ^ " constructor with "
@@ -630,10 +648,10 @@ and eval_def def rho =
                             |  _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
             | _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
         | EXP e -> eval_def (LETDEF ("it", e)) rho
-        | ADT (name, cons) -> 
+        | ADT (name, tyvars, cons) -> 
             let bindings = List.map eval_cons cons in
             let rho' = List.append bindings rho in 
-            (STRING (name), rho')
+            (STRING (def_to_string def), rho')
 
 let math_primop fn = PRIMITIVE (fun xs -> match xs with
                                     ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)
