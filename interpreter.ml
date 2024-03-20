@@ -1,5 +1,11 @@
 
-(* PARSING INPUT *)
+(* 
+   -----------------------------------------
+        
+    -------    MISCELLANEOUS    -------  
+
+   -----------------------------------------
+*)
 let pop_first_char input = String.sub input 1 ((String.length input) - 1)
 
 let list_to_string f xs = 
@@ -18,6 +24,11 @@ exception KindError of string
 exception Pattern_Matching_Not_Exhaustive of string 
 exception Pattern_Matching_Excessive of string
 exception Ill_Pattern of string 
+exception Cringe of string
+let typeInferenceBug = Cringe("The problem with pissing on my grave is eventually you'll run out of piss. -Margaret Thatcher")
+let usefulError x = Cringe x (*for debugging*)
+
+
 (* 
     Returns the value of a key in an association list
    'a -> ('a * 'b) list -> 'b
@@ -33,6 +44,13 @@ let rec zip xs ys = match xs, ys with
 
 let fst = function (a, b) -> a
 let snd = function (a, b) -> b
+(* 
+   -----------------------------------------
+        
+    -------    PARSING    -------  
+
+   -----------------------------------------
+*)
 (* 
    parse takes in string input and returns a list of tokens,
    which is any keyword or string deliminated by a space
@@ -62,7 +80,13 @@ let rec parse input =
     queue
 
 
-(* Types! *)
+(* 
+   -----------------------------------------
+        
+    -------    ABSTRACT SYNTAX    -------  
+
+   -----------------------------------------
+*)
 type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
 let intty = TYCON "int"
 let boolty = TYCON "bool"
@@ -73,10 +97,15 @@ let funtype (args, result) =
   CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
 
 type tyscheme = FORALL of string list * ty
+type subst = (ty * ty) list
+type tyenv = (string * tyscheme) list * string list 
+
+type con = TRIVIAL | EQ of ty * ty | CONJ of con * con
 
 let degentype tau = FORALL ([], tau)
 type constructor = UNARYCONS of string * ty
                 |  NULLCONS of string 
+
 let rec type_to_string = function
     | TYVAR(a) -> "'" ^ a
     | TYCON(c) -> c
@@ -89,7 +118,7 @@ type exp = LITERAL of value
         | APPLY of exp * exp list 
         | LAMBDA of string list * exp
         | LET of def list * exp
-        | MATCH of exp list * (pattern * exp) list
+        | MATCH of exp * (pattern * exp) list
         | TUPLE of (exp list)
 and value = STRING of string 
         |  NUMBER of int
@@ -109,6 +138,13 @@ and pattern = GENERIC of string
         |  VALUE of value 
         |  PATTERN of string * (pattern list)
 
+(* 
+   -----------------------------------------
+        
+    -------    TO STRING LIBRARY    -------  
+
+   -----------------------------------------
+*)
 let cons_to_string = function 
     | (UNARYCONS (name, tau)) -> "UNARYCONS(" ^ name ^ ", " ^ type_to_string tau ^ ")"
     | (NULLCONS name) -> "NULLCONS(" ^ name ^ ")" 
@@ -128,7 +164,7 @@ let rec def_to_string = function
         | (APPLY (f, args)) -> "APPLY(" ^ exp_to_string f ^ ", " ^ list_to_string exp_to_string args ^")"
         | (LAMBDA (xs, e))  -> "LAMBDA(" ^ list_to_string (fun a -> a) xs ^ ", " ^ exp_to_string e ^ ")"
         | (LET (ds, e)) -> "LET(" ^ list_to_string def_to_string ds ^ ", " ^ exp_to_string e ^ ")"
-        | (MATCH (exps, cases)) -> "MATCH(" ^ (list_to_string exp_to_string exps) ^ ", " ^ 
+        | (MATCH (e, cases)) -> "MATCH(" ^ (exp_to_string e) ^ ", " ^ 
                                     (list_to_string 
                                         (fun (p, e) -> "(" ^ (pattern_to_string p) ^ ", " ^ exp_to_string e ^ ")")
                                          cases)
@@ -160,24 +196,25 @@ and pattern_to_string = function
         | VALUE s -> value_to_string s
 let list_pattern_pair_string xs = list_to_string (fun (a, b) -> "(" ^ pattern_to_string a ^ ", " ^ pattern_to_string b ^ ")") xs 
 
-(* 
-    
-    --- Patterns!  ---
-    
-*)
-let get_fun_result = function 
-    | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
-        result
-    | _ -> raise (Ill_Typed "get_fun_result")
-
 let tuple_pattern list = PATTERN ("TUPLE", list)
 let list_patterns = [(PATTERN ("NIL", [])); (PATTERN ("CONS", [tuple_pattern [(GENERIC "_"); (GENERIC "_")]]))]
 let val_patterns = [(GENERIC "_")]
 
 let cons a b = PATTERN ("CONS",[(tuple_pattern [a;b])])
 let nil = PATTERN ("NIL", [])
-let parameters list = PATTERN ("PARAMETERS", list)
 
+(* 
+   -----------------------------------------
+        
+    -------    PATTERN MATCHING    -------  
+        * exhuastiveness +  evaluation! *
+   -----------------------------------------
+*)
+let get_fun_result = function 
+    | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
+        result
+    | _ -> raise (Ill_Typed "get_fun_result")
+    
 (* 
    Given a value, converts it into a pattern
 
@@ -225,19 +262,6 @@ let rec pattern_to_value = function
 
 (* let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL))))) *)
 (* let _ = print_endline (pattern_to_string (value_to_pattern (PATTERNV (PATTERN ("twice", [VALUE (TUPLEV [(PATTERNV (PATTERN ("ZERO", []))); PATTERNV (PATTERN ("ONEBIT", []))])]))))) *)
-(* 
-  Environment association list of names to list of constructors
-*)
-let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_patterns);
-                ("string", val_patterns);("tuple", []); ("parameters", [])]
-
-
-let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
-            ("CONS",  FORALL (["'a"], (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
-            ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
-            ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
-            ("TUPLE", degentype (funtype ([], TYCON "tuple")));
-            ("PARAMETERS", degentype (funtype ([], TYCON "parameters")))]
 
 let rec double_list_all p list list' =
     match list, list' with 
@@ -329,7 +353,7 @@ let find_pairs ideals user_matches =
 (* 
    Given a pattern, returns true if the pattern contains a value
 *)
-   let rec contains_value = function 
+let rec contains_value = function 
    | (GENERIC _) -> false
    | (VALUE _) -> true
    | (PATTERN (_, list)) -> List.exists contains_value list
@@ -407,6 +431,7 @@ map_ideals ideal_list user_list = (match ideal_list, user_list with
     | _, _             -> raise (Ill_Pattern "Mismatch constructor lists"))
 in 
 
+
 (* 
    Given a list of ideal patterns and user patterns, 
    returns true if the user patterns exhaust the ideal patterns,
@@ -446,6 +471,13 @@ in match duplicate_pattern user_patterns with
     |  _ -> pattern_exhaust [GENERIC "_"] user_patterns
 
 
+(* 
+   -----------------------------------------
+        
+    -------    TOKENIZATION    -------  
+
+   -----------------------------------------
+*)
 (* 
   Takes in a queue of strings, and then tokenizes the result
 
@@ -529,7 +561,7 @@ let tokenize queue =
                                      in APPLY (exp, args))
                                 |  _      -> let _ = Queue.pop queue in exp)
             | "match" -> let exps = tokenWhileDelim "with" token in 
-                         MATCH (exps, tokenMatchCases ())
+                         MATCH (TUPLE exps, tokenMatchCases ())
             | "false" -> LITERAL (BOOLV false)
             | "true"  -> LITERAL (BOOLV true)
             | "\"" -> let exp = LITERAL (STRING (Queue.pop queue)) in 
@@ -551,7 +583,13 @@ let tokenize queue =
                             ADT (name, tyvars, tokenADT ())  
           |  name -> EXP (token (name))
       in tokenDef (Queue.pop queue)
+(* 
+   -----------------------------------------
+        
+    -------    EVALUATION    -------  
 
+   -----------------------------------------
+*)
 (* 
     Given a matched pattern and argument, return 
     an association list of the parameters mapped to 
@@ -587,7 +625,27 @@ let rec eval_cons = function
                                         ("Applied " ^ name ^ " constructor with " 
                                           ^ (string_of_int (List.length args)) ^ 
                                           "arguments. Expected 0 arguments."))))
-
+(* 
+    Given a name and an expression, determine if 
+    the name is free in the expression. 
+*)
+let rec freeExp name exp = 
+    let rec free = function 
+        | (VAR x) -> x = name 
+        | (IF (e1, e2, e3)) -> List.exists free [e1; e2; e3]
+        | (APPLY (f, args)) -> List.exists free (f::args)
+        | (LAMBDA (names, body)) -> not (List.exists ((=) name) names) && free body
+        | (LET (bindings, body)) -> List.exists (freeDef name) bindings || free body
+        | (TUPLE exps) -> List.exists free exps
+        | (MATCH (e, ps)) -> free e || (List.exists (fun (p, e) -> free e) ps)
+        | (LITERAL _) -> false 
+    in free exp
+and freeDef name def =
+    let rec free = function 
+        | (LETDEF (n, e)) | (LETREC (n, e)) -> name <> n && freeExp name e
+        | (EXP e) -> freeExp name e
+        | _       -> false 
+    in free def 
 (* 
    Given an expression and rho, compute the value it returns
 
@@ -620,20 +678,10 @@ let rec eval_exp exp rho =
             let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
         | (TUPLE exps) -> TUPLEV (List.map eval exps)
-        | (MATCH (exps, ps)) -> 
-            let valid_lengths = List.for_all (fun (p, e) -> 
-                                match p with 
-                                | (PATTERN ("TUPLE", l)) -> (List.length l) = (List.length exps)
-                                | _ -> raise (Ill_Pattern ("Ill formed pattern parameters"))) 
-                            ps
-            in 
-            if (not valid_lengths)
-            then raise (Ill_Pattern ("Mismatched lengths in expressions and patterns in match expression."))
-            else 
-            let values = List.map eval exps in 
-            let args = tuple_pattern (List.map value_to_pattern values) in 
-            let (p, case) = List.find (fun (p, case) -> pattern_covers p args) ps in 
-            let env = extract_parameters p args in
+        | (MATCH (e, ps)) -> 
+            let value_pattern =  value_to_pattern (eval e) in 
+            let (p, case) = List.find (fun (p, case) -> pattern_covers p value_pattern) ps in 
+            let env = extract_parameters p value_pattern in
             eval_exp case (List.append env rho)
     in eval exp  
 (* 
@@ -662,7 +710,218 @@ and eval_def def rho =
             let bindings = List.map eval_cons cons in
             let rho' = List.append bindings rho in 
             (STRING (def_to_string def), rho')
+(* 
+   -----------------------------------------
+        
+    -------  TYPE INFERENCE    -------  
 
+   -----------------------------------------
+*)
+let domain t = List.map (fun (x, _) -> x) t
+let union xs ys = List.fold_left
+      (fun acc x -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) ys xs
+let inter xs ys = List.fold_left
+      (fun acc x -> if (List.exists (fun y -> y = x) ys) then x::acc else acc) [] xs
+let diff xs ys = List.fold_left
+      (fun acc x -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) [] xs
+
+let (^^) t1 t2 = EQ (t1, t2)
+let (^) c1 c2 = CONJ (c1, c2)
+let (-->) a t = match t with
+    | TYVAR (a') -> if a = a' then [] else [(a, TYVAR a')]
+    | tau        -> [(a, tau)]
+
+let rec insert y l = match l with
+    | []    -> [y]
+    | x::xs -> if y = x then l else x::(insert y xs)
+
+let rec member y l = match l with
+    | [] -> false
+    | x::xs -> y = x || member y xs
+
+let varsubst theta = 
+    let rec find t a = match t with
+    | [] -> TYVAR a
+    | (a', x)::ps -> if a' = a then x else find ps a 
+    in find theta 
+
+let tysubst theta = 
+    let rec sub tau = match tau with
+    | TYVAR (a)     -> varsubst theta a
+    | TYCON (tc)    -> TYCON tc
+    | CONAPP(t, ts) -> CONAPP (sub t, List.map sub ts)
+    in sub
+
+let consubst theta =
+    let rec subst c = match c with
+    |  EQ   (t1, t2) -> tysubst theta t1  ^^ tysubst theta t2
+    |  CONJ (c1, c2) -> subst c1 ^ subst c2
+    |  TRIVIAL       -> c  
+    in subst 
+
+let compose (theta2, theta1) = 
+    let d = union (domain theta1) (domain theta2) in
+    let o f g = fun x -> f (g x) in
+    let xd1 = o (tysubst theta2) in
+    let xd2 = xd1 (varsubst theta1) in
+    (* let rep = o ((tysubst theta2) (varsubst theta1)) in *)
+    List.map (fun x -> (x, xd2 x)) d
+
+let tyvarCt = ref 0
+
+let freshtyvar _ = let () = tyvarCt := !tyvarCt + 1
+    in TYVAR (string_of_int !tyvarCt)
+
+let ftvs tau = 
+    let rec getftvs curSet t = match t with
+        | TYVAR(a) -> insert a curSet
+        | TYCON(_) -> curSet
+        | CONAPP(ty, tys) -> List.fold_left getftvs (getftvs curSet ty) tys
+    in getftvs [] tau
+
+let ftvsGamma(_, free) = free
+
+let findTyscheme s gamma = match gamma with
+    | (env, free) ->
+        let rec locate g = match g with
+        | []               -> raise (Cringe "var inference led to missing type scheme")
+        | (s', scheme)::xs -> if s' = s then scheme else locate xs
+        in locate env
+
+let bindtyscheme (x, ts, (g, f)) = match ts with 
+    | FORALL(bound, t) -> ((x, ts)::g, union f (diff (ftvs t) bound))
+
+let rec bindList ys zs l = match (ys, zs) with
+    | (w::ws, x::xs) -> bindList ws xs ((w, x)::l)
+    | ([], [])       -> l
+    | _              -> raise typeInferenceBug
+
+let instantiate ts tys = match ts with
+    | FORALL(bound, t) -> tysubst (bindList bound tys []) t
+
+let freshInstance ts = match ts with
+    | FORALL(bound, tau) -> instantiate ts (List.map freshtyvar bound)
+
+let rec conjoin c = match c with 
+    | []       -> TRIVIAL
+    | [c1]     -> c1
+    | curC::cs -> curC ^ (conjoin cs)
+
+let canonify ts = match ts with
+    | FORALL(bound, tau) ->
+        let genTyvarName n = String.cat "t" (string_of_int n) in
+        let freenut = diff (ftvs tau) bound in
+        let rec nextIdx n =
+        if member (genTyvarName n) freenut then nextIdx (n + 1) else n in
+        let rec newVars idx olds = match olds with
+        | []    -> []
+        | o::os -> let n = nextIdx idx in
+            genTyvarName n :: (newVars(idx + 1) os) in
+        let newBoundVars = newVars 0 bound in
+        FORALL(newBoundVars, tysubst (bindList bound (List.map (fun x -> TYVAR x) newBoundVars) []) tau)
+    
+
+let generalize vars tau = 
+    canonify (FORALL (diff (ftvs tau) vars, tau))
+
+let confirmLambda e = match e with
+    | LAMBDA(_, _) -> e
+    | _            -> raise typeInferenceBug
+
+let rec solve c = match c with
+    | TRIVIAL      -> []
+    | CONJ(c1, c2) -> 
+        let t1 = solve c1 in
+        let t2 = solve (consubst t1 c2) in
+        compose (t2, t1)
+    | EQ(t1, t2) -> match (t1, t2) with
+        | (TYVAR a, TYVAR _)  -> a --> t2
+        | (TYVAR a, TYCON _)   -> a --> t2
+        | (TYVAR a, CONAPP _)  -> if member a (ftvs t2) then raise typeInferenceBug else a --> t2
+        | (TYCON c1, TYCON c2) -> if c1 = c2 then [] else raise typeInferenceBug
+        | (TYCON _, CONAPP _)  -> raise typeInferenceBug
+        | (CONAPP(t1, t1s), CONAPP(t2, t2s)) -> 
+            let rec zip l1 l2 acc = match (l1, l2) with
+            | ([], [])       -> List.rev acc
+            | (x::xs, y::ys) -> zip xs ys ((x, y)::acc)
+            | _              -> raise typeInferenceBug in
+            let zipped = zip t1s t2s [] in 
+            List.fold_left(fun acc (t, t') -> compose(acc, solve(consubst acc (t ^^ t')))) (solve(t1 ^^ t2)) zipped
+        | _                    -> solve (t2 ^^ t1)
+
+let rec typeof exp g = 
+    let rec infer ex = match ex with
+        | LITERAL(value) -> inferLiteral value
+        | VAR(s) -> (freshInstance (findTyscheme s g), TRIVIAL)
+        | IF(e1, e2, e3) ->
+            let (t1, c1) = infer e1 in
+            let (t2, c2) = infer e2 in
+            let (t3, c3) = infer e3 in
+                (t2, c1 ^ c2 ^ c3 ^ (t2 ^^ t3) ^ (t1 ^^ boolty))
+        | LAMBDA(formals, b) -> 
+            let alphas = List.map (fun form -> (form, freshtyvar())) formals in
+            let newG = List.fold_left (fun acc (x, c) -> bindtyscheme (x, FORALL ([], c), acc)) g alphas in
+            let (endty, endc) = typeof b newG in (funtype ((List.map snd alphas), endty), endc)
+
+        | LET(ds, e) -> 
+            let (defsC, finalGamma) = List.fold_left (fun (curC, curG) d -> 
+                let (_, nextC, nextG, _) = typeOfDef d curG in
+                (nextC, nextG)) (TRIVIAL, g) ds in
+                let (tau, expC) = typeof e finalGamma in (tau, expC ^ defsC)      
+        | APPLY(f, es) -> (match (typesof (f::es) g) with
+            | ([], _) -> raise (Cringe "invalid")
+            | (fty::etys, con) -> let crisp = freshtyvar() in
+                (crisp, con ^ fty ^^ (funtype (etys, crisp))))
+        | _   -> raise (Ill_Typed "Not implemented yet")
+    and inferLiteral v = match v with
+        | STRING(_) -> (strty, TRIVIAL)
+        | NUMBER(_) -> (intty, TRIVIAL)
+        | BOOLV(_) -> (boolty, TRIVIAL)
+        | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
+        | PAIR(v, vs) -> 
+            let (t1, c1) = inferLiteral v in
+            let (t2, c2) = inferLiteral vs in
+            (t2, c1 ^ c2 ^ (listty t1 ^^ t2))
+        | _ -> (boolty, TRIVIAL)
+    and typesof es g = List.fold_left (fun (ts, c) e ->
+            let (curty, curc) = typeof e g in
+            (curty::ts, c ^ curc)) ([], TRIVIAL) es
+in infer exp
+(* (tyscheme, con, type env, output string) *)
+and typeOfDef d g = 
+    let rec inferDef def = match def with 
+        | LETDEF(n, e) -> 
+            let (tau, c) = typeof e g in
+            let theta = solve c in
+            let crisps = inter (domain theta) (ftvsGamma g) in
+            let finalC = c ^ conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
+            let ligma = generalize (ftvsGamma g) ((tysubst theta) tau) in
+            let newGamma = bindtyscheme(n, ligma, g) in
+            (ligma, finalC, newGamma, "")
+        (* possible bug due to using newGamma underneath its definition? type rules say to use gamma *)
+        | LETREC(n, e) -> 
+            let _ = confirmLambda e in
+            let alpha = freshtyvar() in
+            let newGamma = bindtyscheme(n, FORALL([], alpha), g) in
+            let (tau, c) = typeof e newGamma in
+            let c2 = c ^ (alpha ^^ tau) in
+            let theta = solve c2 in
+            let crisps = inter (domain theta) (ftvsGamma newGamma) in
+            let finalC = c2 ^ conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
+            let ligma = generalize (ftvsGamma newGamma) ((tysubst theta) tau) in
+            let finalGamma = bindtyscheme(n, ligma, g) in
+            (ligma, finalC, finalGamma, "")
+        | EXP(e) -> typeOfDef (LETDEF ("it", e)) g
+        | _      -> raise (Ill_Typed "Not implemented yet")
+in inferDef d
+
+(* 
+   -----------------------------------------
+        
+    -------  ENVIRONMENTS    -------  
+    
+   -----------------------------------------
+*)
 let math_primop fn = PRIMITIVE (fun xs -> match xs with
                                     ((NUMBER a)::(NUMBER b)::[]) -> NUMBER (fn a b)
                                     | _ -> raise (Ill_Typed "Cannot apply math operation to non-numbers."))
@@ -698,6 +957,20 @@ let initial_rho =
                                 | [] -> NIL
                                 | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
+(* 
+  Environment association list of names to list of constructors
+*)
+let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_patterns);
+                ("string", val_patterns);("tuple", []);]
+
+(*
+    Environment of variables to their types
+*)
+let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
+            ("CONS",  FORALL (["'a"], (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
+            ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
+            ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
+            ("TUPLE", degentype (funtype ([], TYCON "tuple")));]
 
 let standard_lib = List.fold_left 
                         (fun acc a -> (snd (eval_def (tokenize (parse a)) acc)) ) 
@@ -719,7 +992,7 @@ let rec interpret_lines rho =
     let def = tokenize tokens in 
     let (value, rho') = eval_def def rho in
     let () = print_endline (value_to_string value) in 
-    interpret_lines rho'
+    interpret_lines rho' 
 
 let () = interpret_lines standard_lib
 
