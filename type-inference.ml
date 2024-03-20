@@ -1,20 +1,44 @@
+type ty = TYCON of string | TYVAR of string | CONAPP of ty * ty list
+let intty = TYCON "int"
+let boolty = TYCON "bool"
+let strty = TYCON "string"
+let listty t = CONAPP(TYCON "list", [t])
+let tuple list = CONAPP (TYCON "tuple", list)
+let funtype (args, result) =
+  CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
+
+type tyscheme = FORALL of string list * ty
+type subst = (ty * ty) list
+type tyenv = (string * tyscheme) list * string list 
+
+type constructor = UNARYCONS of string * ty
+                |  NULLCONS of string 
+         
 type exp = LITERAL of value
          | VAR of string 
          | IF of exp * exp * exp
          | APPLY of exp * exp list 
          | LAMBDA of string list * exp
          | LET of def list * exp
-and value =    STRING of string 
-            |  NUMBER of int
-            |  BOOLV  of bool
-            |  NIL
-            |  UNIT
-            |  PAIR of exp * value
-            |  CLOSURE of exp * (string * value) list
+         | MATCH of exp * (pattern * exp) list
+         | TUPLE of exp list
+and value = STRING of string 
+         |  NUMBER of int
+         |  BOOLV  of bool
+         |  NIL
+         |  PAIR of value * value
+         |  CLOSURE of exp * (string * value) list
+         |  PRIMITIVE of (value list -> value)
+         |  TUPLEV of (value list)
+         |  TYPECONS of (value list -> value)
+         |  PATTERNV of pattern
 and def =  LETDEF of string * exp
          | LETREC of string * exp 
          | EXP of exp
-
+         | ADT of string * string list * (constructor list)
+and pattern = GENERIC of string
+           |  VALUE of value 
+           |  PATTERN of string * (pattern list)
 
 exception Cringe of string
 let typeInferenceBug = Cringe("The problem with pissing on my grave is eventually you'll run out of piss. -Margaret Thatcher")
@@ -28,6 +52,7 @@ let unitty = TYCON "unit"
 let listty t = CONAPP(TYCON "list", [t])
 let funtype (args, result) =
   CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
+let tuplety types = CONAPP(TYCON "tuple", types)
 
 type tyscheme = FORALL of string list * ty
 
@@ -172,12 +197,15 @@ let rec solve c = match c with
 let rec typeof exp g = 
   let rec infer ex = match ex with
   | LITERAL(value) -> inferLiteral value
+
   | VAR(s) -> (freshInstance (findTyscheme s g), TRIVIAL)
+
   | IF(e1, e2, e3) ->
       let (t1, c1) = infer e1 in
       let (t2, c2) = infer e2 in
       let (t3, c3) = infer e3 in
         (t2, c1 ^ c2 ^ c3 ^ (t2 ^^ t3) ^ (t1 ^^ boolty))
+
   | LAMBDA(formals, b) -> 
       let alphas = List.map (fun form -> (form, freshtyvar())) formals in
       let newG = List.fold_left (fun acc (x, c) -> bindtyscheme (x, FORALL ([], c), acc)) g alphas in
@@ -187,7 +215,12 @@ let rec typeof exp g =
     let (defsC, finalGamma) = List.fold_left (fun (curC, curG) d -> 
         let (_, nextC, nextG, _) = typeOfDef d curG in
         (nextC, nextG)) (TRIVIAL, g) ds in
-        let (tau, expC) = typeof e finalGamma in (tau, expC ^ defsC)      
+        let (tau, expC) = typeof e finalGamma in (tau, expC ^ defsC) 
+
+  | MATCH (a, b) -> (boolty, TRIVIAL) (*TODO*)
+
+  | TUPLE(es) -> let (taus, c) = typesof es g in (tuplety taus, c)
+
   | APPLY(f, es) -> match (typesof (f::es) g) with
       | ([], _) -> raise (Cringe "invalid")
       | (fty::etys, con) -> let crisp = freshtyvar() in
@@ -199,10 +232,9 @@ let rec typeof exp g =
   | BOOLV(_) -> (boolty, TRIVIAL)
   | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
   | PAIR(e, v) -> 
-    let (t1, c1) = infer e in
+    let (t1, c1) = infer (LITERAL e) in
     let (t2, c2) = infer (LITERAL v) in
       (t2, c1 ^ c2 ^ (listty t1 ^^ t2))
-  | UNIT -> (unitty, TRIVIAL)
   | _ -> (boolty, TRIVIAL)
 
   and typesof es g = List.fold_left (fun (ts, c) e ->
@@ -273,19 +305,19 @@ let debugExpType e =
 
 
 (*type inference sanity checks*)
-
-(* let () = let () = print_string "type1 is... " in printExpType (LITERAL (NUMBER 666))
+(* 
+let () = let () = print_string "type1 is... " in printExpType (LITERAL (NUMBER 666))
 let () = let () = print_string "type2 is... " 
          in printExpType (IF (LITERAL(BOOLV true), LITERAL (NUMBER 420), LITERAL (NUMBER 666)))
 let () = let () = print_string "type3 is... " 
          in printExpType (IF (LITERAL(BOOLV true), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
 let () = let () = print_string "type4 (should fail) is... " 
-        in printExpType (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD"))) *)
+        in printExpType (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD")))  *)
 
 
 (*type inference debugging*)
-
-(* let () = let () = print_string "debug test1: " 
+(* 
+let () = let () = print_string "debug test1: " 
         in debugExpType (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
 let wtf = 
   let (ty, c) = typeof (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD"))) ([], []) in
@@ -308,15 +340,15 @@ let checkInvalidTypeInf e =
   let (ty, c) = typeof e ([], []) in
   try 
     let _ = solve c in 
-      let () = print_string "failed test " in 
-      print_endline(string_of_int !unitTestCt) with Cringe _ -> ()
+    print_string (String.cat "failed test " (string_of_int !unitTestCt))
+  with Cringe _ -> ()
 
 let () = checkValidTypeInf (LITERAL(NUMBER 666))
 let () = checkInvalidTypeInf (IF (LITERAL(NUMBER 0), LITERAL (STRING "xd"), LITERAL (STRING "XD")))
 let () = checkValidTypeInf (IF (LITERAL(BOOLV true), LITERAL (NUMBER 420), LITERAL (NUMBER 666)))
 let () = checkValidTypeInf (LITERAL NIL)
-let () = checkValidTypeInf (LITERAL(PAIR(LITERAL(STRING "anthrax"), NIL)))
+let () = checkValidTypeInf (LITERAL(PAIR(STRING "anthrax", NIL)))
 
-let () = debugExpType (LITERAL (PAIR (LITERAL(STRING "anthrax"), PAIR(LITERAL(NUMBER 500), NIL))))
-let cringe = let (ty, c) = 
-    typeof(LITERAL (PAIR (LITERAL(STRING "anthrax"), PAIR(LITERAL(NUMBER 500), NIL)))) ([], []) in solve c
+
+let () = checkInvalidTypeInf(LITERAL (PAIR(STRING "anthrax", PAIR(NUMBER 500, NIL))))
+let () = checkValidTypeInf(TUPLE [LITERAL(NUMBER 3); LITERAL(STRING "anthrax")])
