@@ -176,7 +176,9 @@ let rec def_to_string = function
         | (BOOLV true) -> "BOOLV(true)"
         | NIL -> "NIL"
         | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
-        | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) ^ ", rho)"
+        | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) 
+                                                ^ ", " ^ (list_to_string (fun (n, v) -> "(" ^ n ^ ", " ^ (value_to_string v) ^ ")") rho)
+                                                ^ ")"
         | (PRIMITIVE f) -> "PRIM"
         | (TUPLEV l) -> "TUPLEV(" ^ (list_to_string value_to_string l) ^ ")"
         | (TYPECONS f) -> "TYPECONS"
@@ -633,7 +635,7 @@ let rec freeExp name exp =
         | (VAR x) -> x = name 
         | (IF (e1, e2, e3)) -> List.exists free [e1; e2; e3]
         | (APPLY (f, args)) -> List.exists free (f::args)
-        | (LAMBDA (names, body)) -> not (List.exists ((=) name) names) && free body
+        | (LAMBDA (names, body)) ->  not (List.exists ((=) name) names) && free body
         | (LET (bindings, body)) -> 
             let names = List.map (fun b -> match b with   
                                         | LETREC (n, e) | LETDEF (n, e) -> n 
@@ -656,6 +658,9 @@ let rec freeExp name exp =
 (* let _ = print_endline (string_of_bool (freeExp "y" (LET ([LETDEF ("x", VAR "y"); LETDEF ("y", LITERAL (NUMBER 4))], VAR "y")))) *)
 (* y is not free *)
 (* let _ = print_endline (string_of_bool (freeExp "y" (LET ([LETDEF ("x", LITERAL (NUMBER 5)); LETDEF ("y", LITERAL (NUMBER 4))], VAR "y"))))  *)
+(* y is free *)
+(* let _ = print_endline (string_of_bool (freeExp "y" (LET ([LETDEF ("x", LITERAL (NUMBER 5)); LETDEF ("z", LITERAL (NUMBER 4))], VAR "y"))))   *)
+(* let _ = print_endline (string_of_bool (freeExp "y" (LAMBDA (["x"; "y"; "z"], VAR("y"))))) *)
 (* 
    Given an expression and rho, compute the value it returns
 
