@@ -891,9 +891,9 @@ let rec typeof exp g =
         | NUMBER(_) -> (intty, TRIVIAL)
         | BOOLV(_) -> (boolty, TRIVIAL)
         | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
-        | PAIR(v, vs) -> 
-            let (t1, c1) = inferLiteral v in
-            let (t2, c2) = inferLiteral vs in
+        | PAIR(e, v) -> 
+          let (t1, c1) = infer (LITERAL e) in
+          let (t2, c2) = infer (LITERAL v) in
             (t2, c1 ^ c2 ^ (listty t1 ^^ t2))
         | _ -> (boolty, TRIVIAL)
     and typesof es g = List.fold_left (fun (ts, c) e ->
