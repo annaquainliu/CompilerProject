@@ -1,4 +1,3 @@
-
 (* 
    -----------------------------------------
         
@@ -635,17 +634,28 @@ let rec freeExp name exp =
         | (IF (e1, e2, e3)) -> List.exists free [e1; e2; e3]
         | (APPLY (f, args)) -> List.exists free (f::args)
         | (LAMBDA (names, body)) -> not (List.exists ((=) name) names) && free body
-        | (LET (bindings, body)) -> List.exists (freeDef name) bindings || free body
+        | (LET (bindings, body)) -> 
+            let names = List.map (fun b -> match b with   
+                                        | LETREC (n, e) | LETDEF (n, e) -> n 
+                                        | _ -> raise (Runtime_Error "Ill formed let")) bindings in 
+            let exps  = List.map (fun b -> match b with 
+                                        | LETREC (n, e) | LETDEF (n, e) -> e 
+                                        | _ -> raise (Runtime_Error "Ill formed let")) bindings in 
+            let memberNames = List.exists ((=) name) names in 
+            (not memberNames) && List.exists free exps || (not memberNames) && free body
         | (TUPLE exps) -> List.exists free exps
         | (MATCH (e, ps)) -> free e || (List.exists (fun (p, e) -> free e) ps)
         | (LITERAL _) -> false 
     in free exp
-and freeDef name def =
-    let rec free = function 
-        | (LETDEF (n, e)) | (LETREC (n, e)) -> name <> n && freeExp name e
-        | (EXP e) -> freeExp name e
-        | _       -> false 
-    in free def 
+
+(* let _ = print_endline (string_of_bool (freeExp "x" (VAR "x")))  true *)
+(* let _ = print_endline (string_of_bool (freeExp "y" (VAR "x"))) false *)
+(* let _ = print_endline (string_of_bool (freeExp "y" (LET ([LETDEF ("x", VAR "y")], VAR "y")))) true *)
+(* let _ = print_endline (string_of_bool (freeExp "x" (LET ([LETDEF ("x", VAR "y")], VAR "y")))) false *)
+(* first binding of x references a free variable y, second creates a new bound variable y, returns bound variable y, should be true *)
+(* let _ = print_endline (string_of_bool (freeExp "y" (LET ([LETDEF ("x", VAR "y"); LETDEF ("y", LITERAL (NUMBER 4))], VAR "y")))) *)
+(* y is not free *)
+(* let _ = print_endline (string_of_bool (freeExp "y" (LET ([LETDEF ("x", LITERAL (NUMBER 5)); LETDEF ("y", LITERAL (NUMBER 4))], VAR "y"))))  *)
 (* 
    Given an expression and rho, compute the value it returns
 
@@ -673,7 +683,10 @@ let rec eval_exp exp rho =
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
             let exists = List.exists (fun a -> List.mem a rho_names) names in 
-            if exists then raise (Shadowing "LAMBDA") else (CLOSURE (LAMBDA (names, body), rho))
+            if exists 
+            then raise (Shadowing "LAMBDA") 
+            else (CLOSURE (LAMBDA (names, body), 
+                            List.filter (fun (n, _) -> freeExp n exp) rho))
         | (LET (defs, body)) -> 
             let final_rho = List.fold_right (fun d rho' -> snd (eval_def d rho')) defs rho in 
             eval_exp body final_rho
