@@ -111,7 +111,7 @@ let rec type_to_string = function
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
 
-type kind = TYPE | INWAITING (kind list) -> kind
+type kind = TYPE | INWAITING of kind list * kind
 
 type exp = LITERAL of value
         | VAR of string 
@@ -961,11 +961,32 @@ let type_to_pattern = function
 *)
 let constructor_to_pattern = function 
     | (NULLCONS name) -> PATTERN (name, [])
-    | (UNARYCONS (name, tau)) -> PATTERN (name, type_to_pattern tau)
+    | (UNARYCONS (name, tau)) -> PATTERN (name, [type_to_pattern tau])
+
+(* 
+   -----------------------------------------
+        
+    -------  KINDING! -------  
+
+   -----------------------------------------
+*)
+let rec eqKind k k' = match k, k' with 
+    | (TYPE, TYPE) -> true
+    | (INWAITING (ks, k), INWAITING (ks', k')) -> eqKind k k' && (List.for_all2 eqKind ks ks')
+    | _             -> false
+
 
 let kindOf tau delta = 
     let rec kind = function 
-        | (TYCON name) -> 
+        | (TYCON name) | (TYVAR name)-> lookup name delta
+        | (CONAPP (tau, taus)) -> 
+            (match kind tau with 
+                | INWAITING (kinds, result_kind) -> 
+                    if List.for_all2 eqKind kinds (List.map kind taus)
+                    then result_kind
+                    else raise (Ill_Typed "Tried to apply type constructor with wrong/unequal types.")
+                | _                 -> raise (Ill_Typed "Tried to apply non-type constructor with types."))
+        
     in kind tau
 (* 
    -----------------------------------------
