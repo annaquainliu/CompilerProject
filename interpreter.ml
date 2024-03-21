@@ -1019,6 +1019,8 @@ let intro_adt d pi delta = match d with
         let pi' = (name, ps)::pi in  
         ((name, kind)::delta, pi)
     | _      -> raise (Ill_Typed "Tried to introduce a non-datatype into the Pi and Delta environment.")
+
+
 (* 
    -----------------------------------------
         
@@ -1072,8 +1074,6 @@ let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_pat
 *)
 let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
             ("CONS",  FORALL (["'a"], (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
-            ("INT", degentype (funtype ([TYCON "int"], TYCON "int")));
-            ("STRING", degentype (funtype ([TYCON "string"], TYCON "string")));
             ("TUPLE", degentype (funtype ([], TYCON "tuple")));]
 
 let standard_lib = List.fold_left 
