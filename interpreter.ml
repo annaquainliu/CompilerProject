@@ -1099,15 +1099,18 @@ let standard_lib = List.fold_left
 (* 
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
+
+   typeOfDef : (tyscheme, con, type env, output string)
 *)
-let rec interpret_lines rho = 
+let rec interpret_lines rho tyenv = 
     let _ = print_string "> " in 
     let tokens = (parse (read_line ())) in 
     let def = tokenize tokens in 
     let (value, rho') = eval_def def rho in
-    let () = print_endline (value_to_string value) in 
-    interpret_lines rho' 
+    let (ty, _, tyenv', str) = typeOfDef def tyenv in
+    let () = print_endline (String.cat (String.cat (value_to_string value) " : ") str) in 
+    interpret_lines rho' tyenv
 
-let () = interpret_lines standard_lib
+let () = interpret_lines standard_lib (gamma, [])
 
     
