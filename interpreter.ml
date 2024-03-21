@@ -1066,8 +1066,7 @@ let initial_rho =
 (* 
   Environment association list of names to list of pattern constructors
 *)
-let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_patterns);
-                ("string", val_patterns);("tuple", []);]
+let datatypes = [("list", list_patterns); ("tuple", []);]
 
 (*
     Environment of variables to their types
