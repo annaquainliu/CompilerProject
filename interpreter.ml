@@ -1017,7 +1017,7 @@ let intro_adt d pi delta = match d with
         in
         let ps = List.map constructor_to_pattern cs in
         let pi' = (name, ps)::pi in  
-        (delta', pi)
+        ((name, kind)::delta, pi)
     | _      -> raise (Ill_Typed "Tried to introduce a non-datatype into the Pi and Delta environment.")
 (* 
    -----------------------------------------
