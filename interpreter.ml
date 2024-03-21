@@ -744,6 +744,29 @@ and eval_def def rho =
 
    -----------------------------------------
 *)
+(* 
+   Given a patttern of a datatype constructor
+   and the type of the constructor, return the
+   bindings of the pattern generics mapped to their types/
+
+   pattern -> ty -> (string * ty) list
+*)
+let extract_tau_params p tau = 
+    match tau with 
+        | (CONAPP (TYCON "function", [arg; result])) ->
+            let rec extract p tau = 
+                (match p, tau with 
+                | (GENERIC n), _ -> [(n, tau)]
+                | (PATTERN (_, ps)), (CONAPP (_, taus)) -> List.concat (List.map2 extract ps taus)
+                | _ -> [])
+            in extract p arg
+        | _ -> raise (Ill_Typed "Type of datatype constructor is not a function type.")
+
+let _ = print_endline (list_to_string 
+                            (fun (n, t) -> "(" ^ n ^ ", " ^ type_to_string t ^ ")") 
+                            (extract_tau_params (cons (VALUE (NUMBER 56)) (GENERIC "xs")) 
+                                                (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))))
+
 let domain t = List.map (fun (x, _) -> x) t
 let union xs ys = List.fold_left
       (fun acc x -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) ys xs
