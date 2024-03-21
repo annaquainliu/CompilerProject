@@ -150,6 +150,10 @@ let cons_to_string = function
     | (UNARYCONS (name, tau)) -> "UNARYCONS(" ^ name ^ ", " ^ type_to_string tau ^ ")"
     | (NULLCONS name) -> "NULLCONS(" ^ name ^ ")" 
 
+let rec kind_to_string = function 
+    | (TYPE) -> "TYPE"
+    | (INWAITING (ks, k)) -> "INWAITING(" ^ (list_to_string kind_to_string ks) ^ ", " ^ kind_to_string k ^ ")"
+
 let rec def_to_string = function 
          | (LETDEF (x, e)) -> "LETDEF(" ^ x ^ ", " ^ exp_to_string e ^ ")"
          | (LETREC (x, e)) -> "LETREC(" ^ x ^ ", " ^ exp_to_string e ^ ")"
@@ -953,6 +957,10 @@ let rec eqKind k k' = match k, k' with
 let kindOf tau delta = 
     let rec kind = function 
         | (TYCON name) | (TYVAR name) -> lookup name delta
+        | (CONAPP (TYCON "tuple", taus)) -> 
+            if (List.for_all (fun t -> kind t = TYPE) taus)
+            then TYPE
+            else raise (Ill_Typed ("Tried to apply tuple type to invalid types")) 
         | (CONAPP (tau, taus)) -> 
             (match kind tau with 
                 | INWAITING (kinds, result_kind) -> 
@@ -963,9 +971,9 @@ let kindOf tau delta =
         
     in kind tau
 
-let asType tau delta = match kindOf tau delta with 
+let asType delta tau = (match kindOf tau delta with 
     | TYPE -> true
-    | _    -> throw (Ill_Typed ((type_to_string tau) ^ " is waiting for another type."))
+    | _    -> raise (Ill_Typed (String.cat (type_to_string tau) " is waiting for another type.")))
 
 (* 
    -----------------------------------------
@@ -1003,23 +1011,24 @@ let intro_adt d pi delta = match d with
     | ADT (name, alphas, cs) -> 
         let eq_name = fun (n, _) -> name = n in
         if List.exists eq_name pi || List.exists eq_name delta
-        then raise (Ill_Typed "The datatype " ^ name ^ " already exists.")
+        then raise (Ill_Typed ("The datatype already exists."))
         else 
         let kind = match alphas with 
-                    | [] -> TYCON name 
+                    | [] -> TYPE 
                     | _  -> INWAITING (List.map (fun _ -> TYPE) alphas, TYPE)
         in
         let bs = (name, kind)::(List.map (fun a -> (a, TYPE)) alphas) in 
         let delta' = List.append bs delta in 
+        let curry_as_type = asType delta' in
         let _ = List.for_all (fun c -> match c with 
                                 | (NULLCONS _) -> true 
-                                | (UNARYCONS (name, tau)) -> asType tau delta') 
+                                | (UNARYCONS (name, tau)) -> curry_as_type tau) 
+                cs
         in
         let ps = List.map constructor_to_pattern cs in
         let pi' = (name, ps)::pi in  
-        ((name, kind)::delta, pi)
+        ((name, kind)::delta, pi')
     | _      -> raise (Ill_Typed "Tried to introduce a non-datatype into the Pi and Delta environment.")
-
 
 (* 
    -----------------------------------------
@@ -1075,6 +1084,8 @@ let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
             ("CONS",  FORALL (["'a"], (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
             ("TUPLE", degentype (funtype ([], TYCON "tuple")));]
 
+let kind = [("int", TYPE); ("bool", TYPE); ("string", TYPE); ("list", INWAITING ([TYPE], TYPE)); ]
+
 let standard_lib = List.fold_left 
                         (fun acc a -> (snd (eval_def (tokenize (parse a)) acc)) ) 
                         initial_rho
@@ -1084,7 +1095,7 @@ let standard_lib = List.fold_left
                             "val rec exists? = fn f xs -> if (null? xs) false (|| (f (car xs)) (exists? f (cdr xs)))";
                             "val rec all? = fn f xs -> if (null? xs) true (&& (f (car xs)) (all? f (cdr xs)))";
                         ] 
-
+                             
 (* 
     interpret_lines runs indefintely, 
    accepting input from stdin and parsing it 
