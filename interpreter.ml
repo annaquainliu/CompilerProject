@@ -111,6 +111,8 @@ let rec type_to_string = function
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
 
+type kind = TYPE | INWAITING (kind list) -> kind
+
 type exp = LITERAL of value
         | VAR of string 
         | IF of exp * exp * exp
@@ -207,8 +209,8 @@ let nil = PATTERN ("NIL", [])
 (* 
    -----------------------------------------
         
-    -------    PATTERN MATCHING    -------  
-        * exhuastiveness +  evaluation! *
+    -------        PATTERNS   -------  
+     * exhuastiveness +  evaluation +  *
    -----------------------------------------
 *)
 let get_fun_result = function 
@@ -470,6 +472,8 @@ let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with
 in match duplicate_pattern user_patterns with 
     | [x] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " is repeated in your patterns."))
     |  _ -> pattern_exhaust [GENERIC "_"] user_patterns
+
+
 
 
 (* 
@@ -936,6 +940,36 @@ in inferDef d
 (* 
    -----------------------------------------
         
+    -------  Datatype Evaluation -------  
+
+   -----------------------------------------
+*)
+(* 
+   Given a type, returns the most general pattern of the type
+
+   type_to_pattern : tau -> pattern
+*)
+let type_to_pattern = function 
+    | (CONAPP (TYCON "tuple", taus)) -> PATTERN ("TUPLE", List.map (fun _ -> GENERIC "_") taus)
+    | _                              -> GENERIC "_"
+
+(* 
+   Given a constructor of some datatype, returns the most general pattern 
+   of the constructor
+
+    constructor_to_pattern : constructor -> pattern
+*)
+let constructor_to_pattern = function 
+    | (NULLCONS name) -> PATTERN (name, [])
+    | (UNARYCONS (name, tau)) -> PATTERN (name, type_to_pattern tau)
+
+let kindOf tau delta = 
+    let rec kind = function 
+        | (TYCON name) -> 
+    in kind tau
+(* 
+   -----------------------------------------
+        
     -------  ENVIRONMENTS    -------  
     
    -----------------------------------------
@@ -976,7 +1010,7 @@ let initial_rho =
                                 | _ -> raise (Ill_Pattern "NIL applied to args")))
     ]
 (* 
-  Environment association list of names to list of constructors
+  Environment association list of names to list of pattern constructors
 *)
 let datatypes = [("list", list_patterns); ("int", val_patterns);("bool", val_patterns);
                 ("string", val_patterns);("tuple", []);]

@@ -507,10 +507,10 @@ let validate_parameters cases =
 
 (* let user_patterns = [(tuple_pattern [VALUE (NUMBER 3)]); (tuple_pattern [(GENERIC "x")])] *)
 (* let user_patterns = [(tuple_pattern [VALUE (NUMBER 3); (GENERIC "_")]); (tuple_pattern [(GENERIC "X"); (GENERIC "X")]); ] *)
-let user_patterns = [(tuple_pattern [(GENERIC "X"); (GENERIC "X")]); (tuple_pattern [(GENERIC "Z"); (GENERIC "y")]);]
+(* let user_patterns = [(tuple_pattern [(GENERIC "X"); (GENERIC "X")]); (tuple_pattern [(GENERIC "Z"); (GENERIC "y")]);] *)
 (* let user_patterns = [VALUE (NUMBER 34)] *)
 (* let user_patterns = [(GENERIC "_")] *)
-let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma))
+(* let _ = print_endline (string_of_bool (validate_patterns user_patterns datatypes gamma)) *)
 
 (* 
 
