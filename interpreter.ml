@@ -110,7 +110,8 @@ let rec type_to_string = function
     | TYCON(c) -> c
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
-
+let scheme_to_string = function 
+    | FORALL (alphas, tau) -> "(forall " ^ list_to_string (fun a -> a) alphas ^ " " ^ type_to_string tau ^ ")" 
 type kind = TYPE | INWAITING of kind list * kind
 
 type exp = LITERAL of value
@@ -1108,7 +1109,7 @@ let rec interpret_lines rho tyenv =
     let def = tokenize tokens in 
     let (value, rho') = eval_def def rho in
     let (ty, _, tyenv', str) = typeOfDef def tyenv in
-    let () = print_endline (String.cat (String.cat (value_to_string value) " : ") str) in 
+    let () = print_endline (String.cat (String.cat (value_to_string value) " : ") (scheme_to_string ty)) in 
     interpret_lines rho' tyenv
 
 let () = interpret_lines standard_lib (gamma, [])
