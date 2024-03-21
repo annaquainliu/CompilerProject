@@ -940,6 +940,36 @@ in inferDef d
 (* 
    -----------------------------------------
         
+    -------  KINDING! -------  
+
+   -----------------------------------------
+*)
+let rec eqKind k k' = match k, k' with 
+    | (TYPE, TYPE) -> true
+    | (INWAITING (ks, k), INWAITING (ks', k')) -> eqKind k k' && (List.for_all2 eqKind ks ks')
+    | _             -> false
+
+
+let kindOf tau delta = 
+    let rec kind = function 
+        | (TYCON name) | (TYVAR name) -> lookup name delta
+        | (CONAPP (tau, taus)) -> 
+            (match kind tau with 
+                | INWAITING (kinds, result_kind) -> 
+                    if List.for_all2 eqKind kinds (List.map kind taus)
+                    then result_kind
+                    else raise (Ill_Typed "Tried to apply type constructor with wrong/unequal types.")
+                | _                 -> raise (Ill_Typed "Tried to apply non-type constructor with types."))
+        
+    in kind tau
+
+let asType tau delta = match kindOf tau delta with 
+    | TYPE -> true
+    | _    -> throw (Ill_Typed ((type_to_string tau) ^ " is waiting for another type."))
+
+(* 
+   -----------------------------------------
+        
     -------  Datatype Evaluation -------  
 
    -----------------------------------------
@@ -962,32 +992,33 @@ let type_to_pattern = function
 let constructor_to_pattern = function 
     | (NULLCONS name) -> PATTERN (name, [])
     | (UNARYCONS (name, tau)) -> PATTERN (name, [type_to_pattern tau])
-
 (* 
-   -----------------------------------------
-        
-    -------  KINDING! -------  
+   Given a datatype definition, introduce the defintion into
+   the Pi and Delta environment.
 
-   -----------------------------------------
+   def -> (string * pattern list) -> (string * kind) -> 
+        (string * pattern list) * (string * kind)
 *)
-let rec eqKind k k' = match k, k' with 
-    | (TYPE, TYPE) -> true
-    | (INWAITING (ks, k), INWAITING (ks', k')) -> eqKind k k' && (List.for_all2 eqKind ks ks')
-    | _             -> false
-
-
-let kindOf tau delta = 
-    let rec kind = function 
-        | (TYCON name) | (TYVAR name)-> lookup name delta
-        | (CONAPP (tau, taus)) -> 
-            (match kind tau with 
-                | INWAITING (kinds, result_kind) -> 
-                    if List.for_all2 eqKind kinds (List.map kind taus)
-                    then result_kind
-                    else raise (Ill_Typed "Tried to apply type constructor with wrong/unequal types.")
-                | _                 -> raise (Ill_Typed "Tried to apply non-type constructor with types."))
-        
-    in kind tau
+let intro_adt d pi delta = match d with 
+    | ADT (name, alphas, cs) -> 
+        let eq_name = fun (n, _) -> name = n in
+        if List.exists eq_name pi || List.exists eq_name delta
+        then raise (Ill_Typed "The datatype " ^ name ^ " already exists.")
+        else 
+        let kind = match alphas with 
+                    | [] -> TYCON name 
+                    | _  -> INWAITING (List.map (fun _ -> TYPE) alphas, TYPE)
+        in
+        let bs = (name, kind)::(List.map (fun a -> (a, TYPE)) alphas) in 
+        let delta' = List.append bs delta in 
+        let _ = List.for_all (fun c -> match c with 
+                                | (NULLCONS _) -> true 
+                                | (UNARYCONS (name, tau)) -> asType tau delta') 
+        in
+        let ps = List.map constructor_to_pattern cs in
+        let pi' = (name, ps)::pi in  
+        (delta', pi)
+    | _      -> raise (Ill_Typed "Tried to introduce a non-datatype into the Pi and Delta environment.")
 (* 
    -----------------------------------------
         
