@@ -106,7 +106,7 @@ type constructor = UNARYCONS of string * ty
                 |  NULLCONS of string 
 
 let rec type_to_string = function
-    | TYVAR(a) -> "'" ^ a
+    | TYVAR(a) -> a
     | TYCON(c) -> c
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
@@ -589,7 +589,7 @@ let tokenize queue =
                         else let _ = Queue.pop queue in (* for = *)
                             LETDEF (key, token (Queue.pop queue))
             | "datatype" -> let name = Queue.pop queue in 
-                            let tyvars = tokenWhileDelim "=" (fun s -> s) in 
+                            let tyvars = tokenWhileDelim "=" pop_first_char in 
                             ADT (name, tyvars, tokenADT ())  
           |  name -> EXP (token (name))
       in tokenDef (Queue.pop queue)
@@ -762,10 +762,10 @@ let extract_tau_params p tau =
             in extract p arg
         | _ -> raise (Ill_Typed "Type of datatype constructor is not a function type.")
 
-let _ = print_endline (list_to_string 
+(* let _ = print_endline (list_to_string 
                             (fun (n, t) -> "(" ^ n ^ ", " ^ type_to_string t ^ ")") 
                             (extract_tau_params (cons (VALUE (NUMBER 56)) (GENERIC "xs")) 
-                                                (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))))
+                                                (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a")))))) *)
 
 let domain t = List.map (fun (x, _) -> x) t
 let union xs ys = List.fold_left
@@ -1033,6 +1033,7 @@ let constructor_to_pattern = function
 *)
 let intro_adt d pi delta = match d with 
     | ADT (name, alphas, cs) -> 
+        let _ = print_endline (def_to_string d) in
         let eq_name = fun (n, _) -> name = n in
         if List.exists eq_name pi || List.exists eq_name delta
         then raise (Ill_Typed ("The datatype already exists."))
@@ -1052,7 +1053,7 @@ let intro_adt d pi delta = match d with
         let ps = List.map constructor_to_pattern cs in
         let pi' = (name, ps)::pi in  
         ((name, kind)::delta, pi')
-    | _      -> raise (Ill_Typed "Tried to introduce a non-datatype into the Pi and Delta environment.")
+    | _      -> (delta, pi)
 
 (* 
    -----------------------------------------
@@ -1122,19 +1123,20 @@ let standard_lib = List.fold_left
                              
 (* 
     interpret_lines runs indefintely, 
-   accepting input from stdin and parsing it 
+    accepting input from stdin and parsing it 
 
-   typeOfDef : (tyscheme, con, type env, output string)
+    typeOfDef : (tyscheme, con, type env, output string)
 *)
-let rec interpret_lines rho tyenv = 
+let rec interpret_lines rho pi delta = 
     let _ = print_string "> " in 
     let tokens = (parse (read_line ())) in 
     let def = tokenize tokens in 
+    (* let (ty, _, gamma', str) = typeOfDef def gamma in *)
+    let (delta', pi') = intro_adt def pi delta in
     let (value, rho') = eval_def def rho in
-    let (ty, _, tyenv', str) = typeOfDef def tyenv in
-    let () = print_endline (String.cat (String.cat (value_to_string value) " : ") (scheme_to_string ty)) in 
-    interpret_lines rho' tyenv
+    let () = print_endline (value_to_string value) in 
+    interpret_lines rho' pi' delta'
 
-let () = interpret_lines standard_lib (gamma, [])
+let () = interpret_lines standard_lib datatypes kind
 
     
