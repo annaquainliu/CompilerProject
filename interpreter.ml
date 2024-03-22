@@ -901,51 +901,49 @@ let rec typeof exp g =
                      (extract p instantiated, ret_ty ^^ tau)
                 | _ -> raise (Ill_Typed "Pattern constructor does not have a function type.")
     in 
-  let rec infer ex = match ex with
-  | LITERAL(value) -> inferLiteral value
+    let rec infer ex = match ex with
+        | LITERAL(value) -> inferLiteral value
 
-  | VAR(s) -> (freshInstance (findTyscheme s g), TRIVIAL)
+        | VAR(s) -> (freshInstance (findTyscheme s g), TRIVIAL)
 
-  | IF(e1, e2, e3) ->
-      let (t1, c1) = infer e1 in
-      let (t2, c2) = infer e2 in
-      let (t3, c3) = infer e3 in
-        (t2, c1 ^^^ c2 ^^^ c3 ^^^ (t2 ^^ t3) ^^^ (t1 ^^ boolty))
+        | IF(e1, e2, e3) ->
+            let (t1, c1) = infer e1 in
+            let (t2, c2) = infer e2 in
+            let (t3, c3) = infer e3 in
+                (t2, c1 ^^^ c2 ^^^ c3 ^^^ (t2 ^^ t3) ^^^ (t1 ^^ boolty))
 
-  | LAMBDA(formals, b) -> 
-      let alphas = List.map (fun form -> (form, freshtyvar())) formals in
-      let newG = List.fold_left (fun acc (x, c) -> bindtyscheme (x, FORALL ([], c), acc)) g alphas in
-      let (endty, endc) = typeof b newG in (funtype ((List.map snd alphas), endty), endc)
+        | LAMBDA(formals, b) -> 
+            let alphas = List.map (fun form -> (form, freshtyvar())) formals in
+            let newG = List.fold_left (fun acc (x, c) -> bindtyscheme (x, FORALL ([], c), acc)) g alphas in
+            let (endty, endc) = typeof b newG in (funtype ((List.map snd alphas), endty), endc)
 
-  | LET(ds, e) -> 
-    let (defsC, finalGamma) = List.fold_left (fun (curC, curG) d -> 
-        let (_, nextC, nextG, _) = typeOfDef d curG in
-        (nextC, nextG)) (TRIVIAL, g) ds in
-        let (tau, expC) = typeof e finalGamma in (tau, expC ^^^ defsC) 
+        | LET(ds, e) -> 
+            let (defsC, finalGamma) = List.fold_left (fun (curC, curG) d -> 
+                let (_, nextC, nextG, _) = typeOfDef d curG in
+                (nextC, nextG)) (TRIVIAL, g) ds in
+                let (tau, expC) = typeof e finalGamma in (tau, expC ^^^ defsC) 
 
-  | MATCH (a, b) -> (boolty, TRIVIAL) (*TODO*)
+        | MATCH (a, b) -> (boolty, TRIVIAL) (*TODO*)
 
-  | TUPLE(es) -> let (taus, c) = typesof es g in (tuplety taus, c)
+        | TUPLE(es) -> let (taus, c) = typesof es g in (tuplety taus, c)
 
-  | APPLY(f, es) -> match (typesof (f::es) g) with
-      | ([], _) -> raise (Cringe "invalid")
-      | (fty::etys, con) -> let crisp = freshtyvar() in
-        (crisp, con ^^^ fty ^^ (funtype (etys, crisp)))
-
-  and inferLiteral v = match v with
-  | STRING(_) -> (strty, TRIVIAL)
-  | NUMBER(_) -> (intty, TRIVIAL)
-  | BOOLV(_) -> (boolty, TRIVIAL)
-  | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
-  | PAIR(e, v) -> 
-    let (t1, c1) = infer (LITERAL e) in
-    let (t2, c2) = infer (LITERAL v) in
-      (t2, c1 ^^^ c2 ^^^ (listty t1 ^^ t2))
-  | _ -> (boolty, TRIVIAL)
-
-  and typesof es g = List.fold_left (fun (ts, c) e ->
-         let (curty, curc) = typeof e g in
-         (curty::ts, c ^^^ curc)) ([], TRIVIAL) es
+        | APPLY(f, es) -> match (typesof (f::es) g) with
+            | ([], _) -> raise (Cringe "invalid")
+            | (fty::etys, con) -> let crisp = freshtyvar() in
+                (crisp, con ^^^ fty ^^ (funtype (etys, crisp)))
+    and inferLiteral v = match v with
+        | STRING(_) -> (strty, TRIVIAL)
+        | NUMBER(_) -> (intty, TRIVIAL)
+        | BOOLV(_) -> (boolty, TRIVIAL)
+        | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
+        | PAIR(e, v) -> 
+            let (t1, c1) = infer (LITERAL e) in
+            let (t2, c2) = infer (LITERAL v) in
+            (t2, c1 ^^^ c2 ^^^ (listty t1 ^^ t2))
+        | _ -> (boolty, TRIVIAL)
+    and typesof es g = List.fold_left (fun (ts, c) e ->
+            let (curty, curc) = typeof e g in
+            (curty::ts, c ^^^ curc)) ([], TRIVIAL) es
 
   in infer exp
 
