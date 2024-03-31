@@ -16,14 +16,24 @@ let list_to_string f xs =
 
 exception Ill_Typed of string 
 exception Runtime_Error of string 
-exception KindError of string
 exception Pattern_Matching of string 
-exception Ill_Pattern of string 
 exception Cringe of string
 let typeInferenceBug = Cringe("The problem with pissing on my grave is eventually you'll run out of piss. -Margaret Thatcher")
 let usefulError x = Cringe x (*for debugging*)
 
+let e_to_string = function
+    | (Ill_Typed s)        -> ("Type Error", s)
+    | (Runtime_Error s)    -> ("Runtime Error", s)
+    | (Pattern_Matching s) -> ("Pattern Error", s)
+    | (Cringe s)           -> ("Cringe", s)
+    | e                    -> ("Error", "error")
 
+let print_error ex = 
+    let reset_ppf = Spectrum.prepare_ppf Format.std_formatter in
+    let (ex_type, message) = e_to_string ex in 
+    let _ = Format.printf "@{<green>%s@}\n" (ex_type ^ ": ") in
+    let _ = reset_ppf () in 
+    print_endline message
 (* 
     Returns the value of a key in an association list
    'a -> ('a * 'b) list -> 'b
@@ -35,7 +45,7 @@ let rec lookup k = function
 let rec zip xs ys = match xs, ys with
     | [], [] -> []
     | k::ks, v::vs -> (k, v)::zip ks vs
-    | _ ,      _       -> raise Runtime_Error "Mismatched lengths of lists"
+    | _ ,      _       -> raise (Runtime_Error "Mismatched lengths of lists")
 
 let fst = function (a, b) -> a
 let snd = function (a, b) -> b
@@ -232,8 +242,8 @@ let rec value_to_pattern = function
     | PAIR (v, vs)    -> cons (value_to_pattern v) (value_to_pattern vs)
     | PATTERNV p  -> p_vals_to_p p
     | (CLOSURE _) 
-    | (PRIMITIVE _)   -> raise (Ill_Pattern ("Cannot pattern match on a function."))
-    | (TYPECONS s)    -> raise (Ill_Pattern ("Pattern matching on constructor requires application '()'. "))
+    | (PRIMITIVE _)   -> raise (Ill_Typed ("Cannot pattern match on a function."))
+    | (TYPECONS s)    -> raise (Ill_Typed ("Pattern matching on constructor requires application '()'. "))
     | v               -> (VALUE v)
 and 
 (* 
@@ -245,7 +255,7 @@ and
 p_vals_to_p = function
     | (PATTERN (name, list)) -> (PATTERN (name, List.map p_vals_to_p list))
     | (VALUE v)  -> value_to_pattern v
-    | _          -> raise (Ill_Pattern "Generic is not a valid pattern value.")
+    | _          -> raise (Ill_Typed "Generic is not a valid pattern value.")
 (* 
    Given a pattern, converts it into a value
     
@@ -253,15 +263,15 @@ p_vals_to_p = function
 *)
 let rec pattern_to_value = function 
     | (VALUE v)   -> v
-    | (GENERIC c) -> raise (Ill_Pattern ("Cannot transform a generic" ^ c ^ " to a value"))
+    | (GENERIC c) -> raise (Ill_Typed ("Cannot transform a generic" ^ c ^ " to a value"))
     | (PATTERN ("NIL", [])) -> NIL
     | (PATTERN ("TUPLE", ps)) -> TUPLEV (List.map pattern_to_value ps) 
     | (PATTERN ("CONS", ps)) -> 
         (match ps with 
             | [p] -> (match pattern_to_value p with 
                     | (TUPLEV [v; vs]) -> PAIR (v, vs)
-                    | _                ->  raise (Ill_Pattern ("Ill formed CONS application.")))
-            |  _  -> raise (Ill_Pattern ("Ill formed CONS application.")))
+                    | _                ->  raise (Ill_Typed ("Ill formed CONS application.")))
+            |  _  -> raise (Ill_Typed ("Ill formed CONS application.")))
     |  p  -> (PATTERNV p)
 
 (* let _ = print_endline (pattern_to_string (value_to_pattern (PAIR (NUMBER 3, PAIR (NUMBER 1, NIL))))) *)
@@ -271,7 +281,7 @@ let rec double_list_all p list list' =
     match list, list' with 
         | [], [] -> true 
         | (x::xs), (y::ys) -> (p x y) && double_list_all p xs ys
-        | _   -> raise (Ill_Pattern ("ill formed constructors when comparing " ^ 
+        | _   -> raise (Ill_Typed ("ill formed constructors when comparing " ^ 
                             (list_to_string pattern_to_string list) ^ " " ^  
                             (list_to_string pattern_to_string list')))
 
@@ -298,7 +308,7 @@ let rec cartesian_product input current_list result =
 
 let get_name = function 
     | (PATTERN (name, _)) -> name
-    | _ -> raise (Ill_Pattern "Tried to get name of generic/value")
+    | _ -> raise (Ill_Typed "Tried to get name of generic/value")
 (* 
     Given an ideal pattern and a user pattern, splits
     the ideal pattern into more ideal patterns.
@@ -333,7 +343,7 @@ let rec duplicate_pattern = function
 *)
 let list_find f xs = 
     let rec find = function 
-        | []    -> raise (Ill_Pattern "Find pattern Issue")
+        | []    -> raise (Ill_Typed "Find pattern Issue")
         | y::ys -> if f y
                    then (y, ys)
                    else let (matched, rest) = find ys 
@@ -426,13 +436,13 @@ let rec splitting ideal user = (match ideal, user with
     | (GENERIC _), (GENERIC _) -> [GENERIC "_"]
     | (GENERIC _), (VALUE s)   -> [(VALUE s); (GENERIC "_");]
     | (VALUE _), (VALUE _)     -> []
-    | _, _             -> raise (Ill_Pattern ((pattern_to_string ideal) ^ " is more specific than " ^ (pattern_to_string user))))
+    | _, _             -> raise (Ill_Typed ((pattern_to_string ideal) ^ " is more specific than " ^ (pattern_to_string user))))
 and
 (* Helper function for splitting *)
 map_ideals ideal_list user_list = (match ideal_list, user_list with 
     | [], []           -> []
     | (i::is), (u::us) -> splitting i u::(map_ideals is us)
-    | _, _             -> raise (Ill_Pattern "Mismatch constructor lists"))
+    | _, _             -> raise (Ill_Typed "Mismatch constructor lists"))
 in 
 
 
@@ -608,7 +618,7 @@ let rec extract_parameters p arg = match p, arg with
     | (GENERIC x), _ -> [(x, pattern_to_value arg)]
     | (PATTERN (_, ps)), (PATTERN (_, ps')) -> 
         List.fold_left2 (fun acc p p' -> List.append (extract_parameters p p') acc) [] ps ps'
-    | _   -> raise (Ill_Pattern "Incorrectly matched patterns")
+    | _   -> raise (Ill_Typed "Incorrectly matched patterns")
 (* 
    Given a constructor, create a binding of the constructor in rho
 
@@ -1134,10 +1144,10 @@ let initial_rho =
     ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false));
     ("CONS", TYPECONS (fun arg -> match arg with 
                                 | [TUPLEV [v; vs]] -> PAIR (v, vs)
-                                | _ -> raise (Ill_Pattern "CONS applied to non-tuple")));
+                                | _ -> raise (Ill_Typed "CONS applied to non-tuple")));
     ("NIL", TYPECONS (fun arg -> match arg with 
                                 | [] -> NIL
-                                | _ -> raise (Ill_Pattern "NIL applied to args")))
+                                | _ -> raise (Ill_Typed "NIL applied to args")))
     ]
 (* 
   Environment association list of names to list of pattern constructors
@@ -1181,7 +1191,7 @@ let rec interpret_lines rho pi delta =
             let () = print_endline (value_to_string value) in 
             interpret_lines rho' pi' delta'
         with error -> 
-            let _ = print_endline "ERROR" in 
+            let _ = print_error error in 
             interpret ()
     in interpret ()
 
