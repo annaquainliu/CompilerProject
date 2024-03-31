@@ -31,9 +31,9 @@ let e_to_string = function
 let print_error ex = 
     let reset_ppf = Spectrum.prepare_ppf Format.std_formatter in
     let (ex_type, message) = e_to_string ex in 
-    let _ = Format.printf "@{<green>%s@}\n" (ex_type ^ ": ") in
+    let _ = Format.printf "@{<red>%s@}\n" (ex_type ^ ": ") in
     let _ = reset_ppf () in 
-    print_endline message
+    print_string (message ^ "\n")
 (* 
     Returns the value of a key in an association list
    'a -> ('a * 'b) list -> 'b
