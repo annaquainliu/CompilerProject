@@ -937,6 +937,29 @@ let rec typeof exp g =
             | ([], _) -> raise (Cringe "invalid")
             | (fty::etys, con) -> let crisp = freshtyvar() in
                 (crisp, con ^^^ fty ^^ (funtype (etys, crisp)))
+        | MATCH (exp1, ps_exps) -> (match ps_exps with
+          | (p1, e1)::pairs -> 
+            let (t0, c0) = typeof exp1 g in
+            (*get first gamma, constraint, pTy, and eTy for folding later*)
+            let (g1, c1, pTy1, rTy1) = 
+              let (tyOfp1, cOfp1) = typeof (LITERAL(PATTERNV(p1))) g in
+              let (bindings1, extract1C) = extract_tau_params p1 tyOfp1 in
+              let newG = appendGamma bindings1 g in 
+              let result1ty, result1C = typeof e1 newG in
+              (newG, (c0 ^^^ cOfp1 ^^^ extract1C ^^^ result1C ^^^ (tyOfp1 ^^ t0)), tyOfp1, result1ty) in
+
+            let (finalG, finalC) = List.fold_left(fun (curG, curC) (curP, curE) ->
+              let (curPTy, curPC) = typeof (LITERAL(PATTERNV(curP))) g in (*shouldn't need curG here*)
+              let (curBindings, curExtractC) = extract_tau_params curP pTy1 in
+              let nextG = appendGamma curBindings curG in
+              let (curResTy, curResC) = typeof curE nextG in
+              let nextC = curC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ curExtractC ^^^ curPC in
+              (nextG, nextC)
+            ) (g1, c1) pairs in
+
+            (rTy1, finalC)
+          | _ -> raise (Ill_Typed "bad match inference"))
+
     and inferLiteral v = match v with
         | STRING(_) -> (strty, TRIVIAL)
         | NUMBER(_) -> (intty, TRIVIAL)
