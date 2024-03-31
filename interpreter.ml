@@ -975,6 +975,8 @@ and typeOfDef d g =
       (ligma, finalC, finalGamma, "")
 
     | EXP(e) -> typeOfDef (LETDEF ("it", e)) g
+
+    | ADT(name, alphas, cs) -> raise (Ill_Typed "Not implemented yet")
   in inferDef d
 
 let rec printType t = match t with 
@@ -1150,7 +1152,7 @@ let datatypes = [("list", list_patterns); ("tuple", []);]
     Environment of variables to their types
 *)
 let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
-            ("CONS",  FORALL (["'a"], (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
+            ("CONS",  FORALL (["'a"], (funtype ([tuplety [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
             ("TUPLE", degentype (funtype ([], TYCON "tuple")));]
 
 let kind = [("int", TYPE); ("bool", TYPE); ("string", TYPE); ("list", INWAITING ([TYPE], TYPE)); ]
