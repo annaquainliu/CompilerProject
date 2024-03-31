@@ -20,8 +20,7 @@ exception Runtime_Error of string
 exception Mismatch_Lengths
 exception Shadowing of string
 exception KindError of string
-exception Pattern_Matching_Not_Exhaustive of string 
-exception Pattern_Matching_Excessive of string
+exception Pattern_Matching of string 
 exception Ill_Pattern of string 
 exception Cringe of string
 let typeInferenceBug = Cringe("The problem with pissing on my grave is eventually you'll run out of piss. -Margaret Thatcher")
@@ -462,8 +461,8 @@ in
 let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with 
     | (i::is), [(GENERIC _)] -> true
     | [], []       -> true 
-    | [], (x::xs) -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " will never be reached."))
-    | (x::xs), [] -> raise (Pattern_Matching_Not_Exhaustive ((pattern_to_string x) ^ " is not matched in your patterns."))
+    | [], (x::xs) -> raise (Pattern_Matching ((pattern_to_string x) ^ " will never be reached."))
+    | (x::xs), [] -> raise (Pattern_Matching ((pattern_to_string x) ^ " is not matched in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users, left_over_ideals) = find_pairs ideals user_matches in
         let left_over_ideals = List.rev left_over_ideals in
@@ -475,7 +474,7 @@ let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with
         pattern_exhaust new_ideals new_users)
 
 in match duplicate_pattern user_patterns with 
-    | [x] -> raise (Pattern_Matching_Excessive ((pattern_to_string x) ^ " is repeated in your patterns."))
+    | [x] -> raise (Pattern_Matching ((pattern_to_string x) ^ " is repeated in your patterns."))
     |  _ -> pattern_exhaust [GENERIC "_"] user_patterns
 
 
@@ -1174,14 +1173,21 @@ let standard_lib = List.fold_left
     typeOfDef : (tyscheme, con, type env, output string)
 *)
 let rec interpret_lines rho pi delta = 
-    let _ = print_string "> " in 
-    let tokens = (parse (read_line ())) in 
-    let def = tokenize tokens in 
-    (* let (ty, _, gamma', str) = typeOfDef def gamma in *)
-    let (delta', pi') = intro_adt def pi delta in
-    let (value, rho') = eval_def def rho in
-    let () = print_endline (value_to_string value) in 
-    interpret_lines rho' pi' delta'
+    let rec interpret () = 
+        let _ = print_string "> " in 
+        try 
+            let tokens = (parse (read_line ())) in 
+            let def = tokenize tokens in 
+            (* let (ty, _, gamma', str) = typeOfDef def gamma in *)
+            let (delta', pi') = intro_adt def pi delta in
+            let (value, rho') = eval_def def rho in
+            let () = print_endline (value_to_string value) in 
+            interpret_lines rho' pi' delta'
+        with error -> 
+            let _ = print_endline "ERROR" in 
+            interpret ()
+    in interpret ()
+
 
 let () = interpret_lines standard_lib datatypes kind
 
