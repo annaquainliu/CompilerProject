@@ -14,11 +14,8 @@ let list_to_string f xs =
       |  (x::xs)    -> (f x) ^ ", " ^ stringify xs
     in "[" ^ stringify xs ^ "]"
 
-exception Not_Found of string
 exception Ill_Typed of string 
 exception Runtime_Error of string 
-exception Mismatch_Lengths
-exception Shadowing of string
 exception KindError of string
 exception Pattern_Matching of string 
 exception Ill_Pattern of string 
@@ -32,13 +29,13 @@ let usefulError x = Cringe x (*for debugging*)
    'a -> ('a * 'b) list -> 'b
 *)
 let rec lookup k = function 
-            | [] -> raise (Not_Found ("Could not find variable '" ^ k ^ "'"))
+            | [] -> raise (Runtime_Error ("Could not find variable '" ^ k ^ "'"))
             | ((k', v)::rest) -> if k' = k then v else lookup k rest
 
 let rec zip xs ys = match xs, ys with
     | [], [] -> []
     | k::ks, v::vs -> (k, v)::zip ks vs
-    | _ ,      _       -> raise Mismatch_Lengths
+    | _ ,      _       -> raise Runtime_Error "Mismatched lengths of lists"
 
 let fst = function (a, b) -> a
 let snd = function (a, b) -> b
@@ -697,7 +694,7 @@ let rec eval_exp exp rho =
             let rho_names = List.map fst rho in 
             let exists = List.exists (fun a -> List.mem a rho_names) names in 
             if exists 
-            then raise (Shadowing "LAMBDA") 
+            then raise (Runtime_Error "LAMBDA") 
             else (CLOSURE (LAMBDA (names, body), 
                             List.filter (fun (n, _) -> freeExp n exp) rho))
         | (LET (defs, body)) -> 
@@ -717,13 +714,13 @@ and eval_def def rho =
         match def with 
         | LETDEF (name, exp) -> 
             if name <> "it" && List.exists (fun n -> n = name) (List.map fst rho) 
-            then raise (Shadowing  "LETDEF")
+            then raise (Runtime_Error  "LETDEF")
             else let value = eval_exp exp rho in 
                 (value, (name, value)::rho)
         | LETREC (name, exp) -> (match exp with 
             | (LAMBDA _) -> 
                 if List.exists (fun n -> n = name) (List.map fst rho) 
-                then raise (Shadowing "LETREC")
+                then raise (Runtime_Error "LETREC")
                 else let closure = eval_exp exp rho 
                     in (match closure with 
                             | (CLOSURE (l, c)) -> 
