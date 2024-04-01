@@ -895,7 +895,7 @@ let rec typeof exp g =
     let extract_tau_params p tau = 
         let rec extract p tau = 
             (match p, tau with 
-            | (GENERIC n), _ -> [(n, tau)]
+            | (GENERIC n), _ -> [(n, FORALL ([], tau))]
             | (PATTERN (_, ps)), (CONAPP (_, taus)) -> List.concat (List.map2 extract ps taus)
             | _ -> [])
         in match p with 
@@ -929,14 +929,13 @@ let rec typeof exp g =
                 (nextC, nextG)) (TRIVIAL, g) ds in
                 let (tau, expC) = typeof e finalGamma in (tau, expC ^^^ defsC) 
 
-        | MATCH (a, b) -> (boolty, TRIVIAL) (*TODO*)
-
         | TUPLE(es) -> let (taus, c) = typesof es g in (tuplety taus, c)
 
-        | APPLY(f, es) -> match (typesof (f::es) g) with
+        | APPLY(f, es) -> (match (typesof (f::es) g) with
             | ([], _) -> raise (Cringe "invalid")
             | (fty::etys, con) -> let crisp = freshtyvar() in
-                (crisp, con ^^^ fty ^^ (funtype (etys, crisp)))
+                (crisp, con ^^^ fty ^^ (funtype (etys, crisp))))
+
         | MATCH (exp1, ps_exps) -> (match ps_exps with
           | (p1, e1)::pairs -> 
             let (t0, c0) = typeof exp1 g in
