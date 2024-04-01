@@ -938,6 +938,8 @@ let rec typeof exp g =
 
         | MATCH (exp1, ps_exps) -> (match ps_exps with
           | (p1, e1)::pairs -> 
+            let appendGamma bindings g = 
+              List.fold_left (fun curG (x, ts) -> bindtyscheme (x, ts, curG)) g bindings in
             let (t0, c0) = typeof exp1 g in
             (*get first gamma, constraint, pTy, and eTy for folding later*)
             let (g1, c1, pTy1, rTy1) = 
@@ -955,7 +957,6 @@ let rec typeof exp g =
               let nextC = curC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ curExtractC ^^^ curPC in
               (nextG, nextC)
             ) (g1, c1) pairs in
-
             (rTy1, finalC)
           | _ -> raise (Ill_Typed "bad match inference"))
 
