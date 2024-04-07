@@ -949,7 +949,7 @@ let rec typeof exp g =
               let result1ty, result1C = typeof e1 newG in
               (newG, (c0 ^^^ cOfp1 ^^^ extract1C ^^^ result1C ^^^ (tyOfp1 ^^ t0)), tyOfp1, result1ty) in
 
-            let (finalG, finalC) = List.fold_left(fun (curG, curC) (curP, curE) ->
+            let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
               let (curPTy, curPC) = typeof (LITERAL(PATTERNV(curP))) g in (*shouldn't need curG here*)
               let (curBindings, curExtractC) = extract_tau_params curP pTy1 in
               let nextG = appendGamma curBindings curG in
