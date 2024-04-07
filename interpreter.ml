@@ -114,10 +114,13 @@ type constructor = UNARYCONS of string * ty
 let rec type_to_string = function
     | TYVAR(a) -> a
     | TYCON(c) -> c
+    | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
+        "(" ^ list_to_string type_to_string args ^ " -> " ^ type_to_string result ^ ")"
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
 let scheme_to_string = function 
     | FORALL (alphas, tau) -> "(forall " ^ list_to_string (fun a -> a) alphas ^ " " ^ type_to_string tau ^ ")" 
+  
 type kind = TYPE | INWAITING of kind list * kind
 
 type exp = LITERAL of value
@@ -189,9 +192,7 @@ let rec def_to_string = function
         | (BOOLV true) -> "BOOLV(true)"
         | NIL -> "NIL"
         | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
-        | (CLOSURE (LAMBDA (args, e), rho))  -> "CLOSURE(" ^ exp_to_string (LAMBDA (args, e)) 
-                                                ^ ", " ^ (list_to_string (fun (n, v) -> "(" ^ n ^ ", " ^ (value_to_string v) ^ ")") rho)
-                                                ^ ")"
+        | (CLOSURE (LAMBDA (args, e), rho))  -> "<function>"
         | (PRIMITIVE f) -> "PRIM"
         | (TUPLEV l) -> "TUPLEV(" ^ (list_to_string value_to_string l) ^ ")"
         | (TYPECONS f) -> "TYPECONS"
@@ -882,7 +883,27 @@ let rec solve c = match c with
         let zipped = zip t1s t2s [] in 
         List.fold_left(fun acc (t, t') -> compose(acc, solve(consubst acc (t ^^ t')))) (solve(t1 ^^ t2)) zipped
     | _                    -> solve (t2 ^^ t1)
-  
+
+let rec printType t = match t with 
+    | TYVAR(a) -> print_string a
+    | TYCON(c) -> print_string c
+    | CONAPP(TYCON tc, [ty]) ->
+      let () = print_string tc in let () = print_string " " in printType ty
+    | _ -> print_string "Margaret Thatcher"  
+
+let rec printConstraint c = match c with
+    | TRIVIAL -> print_string "TRIVIAL"
+    | EQ(t1, t2) -> 
+        let () = print_string "(" in
+        let () = print_string (type_to_string t1) in
+        let () = print_string " ~ " in
+        let () =  print_string (type_to_string t2) in print_string ")"
+    | CONJ(c1, c2) ->
+        let () = print_string "(" in
+        let () = printConstraint c1 in
+        let () = print_string " ^^^ " in
+        let () = printConstraint c2 in print_string ")"
+
 let rec typeof exp g = 
   (* 
         Given a patttern of a datatype constructor
@@ -933,8 +954,10 @@ let rec typeof exp g =
 
         | APPLY(f, es) -> (match (typesof (f::es) g) with
             | ([], _) -> raise (Cringe "invalid")
-            | (fty::etys, con) -> let crisp = freshtyvar() in
-                (crisp, con ^^^ fty ^^ (funtype (etys, crisp))))
+            | (fty::etys, con) -> 
+                let crisp = freshtyvar() in
+                let c = con ^^^ fty ^^ (funtype (etys, crisp)) in 
+                (crisp, c))
 
         | MATCH (exp1, ps_exps) -> (match ps_exps with
           | (p1, e1)::pairs -> 
@@ -970,9 +993,9 @@ let rec typeof exp g =
             let (t2, c2) = infer (LITERAL v) in
             (t2, c1 ^^^ c2 ^^^ (listty t1 ^^ t2))
         | _ -> (boolty, TRIVIAL)
-    and typesof es g = List.fold_left (fun (ts, c) e ->
+    and typesof es g = List.fold_right (fun e (ts, c) ->
             let (curty, curc) = typeof e g in
-            (curty::ts, c ^^^ curc)) ([], TRIVIAL) es
+            (curty::ts, c ^^^ curc)) es ([], TRIVIAL) 
 
   in infer exp
 
@@ -1008,28 +1031,8 @@ and typeOfDef d g =
     | ADT(name, alphas, cs) -> raise (Ill_Typed "Not implemented yet")
   in inferDef d
 
-let rec printType t = match t with 
-  | TYVAR(a) -> print_string a
-  | TYCON(c) -> print_string c
-  | CONAPP(TYCON tc, [ty]) ->
-    let () = print_string tc in let () = print_string " " in printType ty
-  | _ -> print_string "Margaret Thatcher"  
-
 let printExpType e =
-  let (tau, _) = typeof e ([], []) in let () = printType tau in print_endline ""
-
-let rec printConstraint c = match c with
-  | TRIVIAL -> print_string "TRIVIAL"
-  | EQ(t1, t2) -> 
-      let () = print_string "(" in
-      let () = printType t1 in
-      let () = print_string " ~ " in
-      let () = printType t2 in print_string ")"
-  | CONJ(c1, c2) ->
-      let () = print_string "(" in
-      let () = printConstraint c1 in
-      let () = print_string " ^^^ " in
-      let () = printConstraint c2 in print_string ")"
+    let (tau, _) = typeof e ([], []) in let () = printType tau in print_endline ""
 
 (*returns string forms of type and constraint*)
 let debugExpType e = 
@@ -1144,81 +1147,98 @@ let math_primop fn = PRIMITIVE (fun xs -> match xs with
 let bin_primop fn = PRIMITIVE (fun xs -> match xs with 
                                     ((BOOLV a)::(BOOLV b)::[]) -> BOOLV (fn a b)
                                     | _ -> raise (Ill_Typed "Cannot apply boolean operation to non-booleans."))
-let initial_rho = 
+let math_ty = funtype ([intty; intty], intty)
+let alpha = TYVAR "a"
+
+let initial_basis = 
     [
     ("<", PRIMITIVE (fun xs -> match xs with
                             ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a < b)
-                            | _ -> raise (Ill_Typed "Cannot apply < to non-numbers.")));
+                            | _ -> raise (Ill_Typed "Cannot apply < to non-numbers.")),
+            math_ty);
     (">", PRIMITIVE (fun xs -> match xs with
                             ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a > b)
-                            | _ -> raise (Ill_Typed "Cannot apply > to non-numbers.")));
+                            | _ -> raise (Ill_Typed "Cannot apply > to non-numbers.")),
+            math_ty);
     ("=", PRIMITIVE (fun xs -> match xs with 
                                    ((NUMBER a)::(NUMBER b)::[]) -> BOOLV (a = b)
                                  | ((BOOLV a)::(BOOLV b)::[])   -> BOOLV (a = b)
                                  | ((STRING a)::(STRING b)::[]) -> BOOLV (a = b)
-                                 | _        -> raise (Ill_Typed "Cannot apply = to non primitives or mixed types")));
-    ("-", math_primop (-));
-    ("+", math_primop (+));
-    ("/", math_primop (/));
-    ("*", math_primop ( * ) );
-    ("mod", math_primop (mod));
-    ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
-    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise (Ill_Typed "Cannot apply car to non-lists")));
-    ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false));
+                                 | _        -> raise (Ill_Typed "Cannot apply = to non primitives or mixed types")),
+            funtype ([alpha; alpha], boolty));
+    ("-", math_primop (-), math_ty);
+    ("+", math_primop (+), math_ty);
+    ("/", math_primop (/), math_ty);
+    ("*", math_primop ( * ), math_ty);
+    ("mod", math_primop (mod), math_ty);
+    ("car", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v | _ -> raise (Ill_Typed "Cannot apply car to non-lists")),
+        funtype ([listty alpha], alpha));
+    ("cdr", PRIMITIVE (fun xs -> match xs with [(PAIR (v, v'))] -> v' | _ -> raise (Ill_Typed "Cannot apply cdr to non-lists")),
+        funtype([listty alpha], listty alpha));
+    ("null?", PRIMITIVE (fun xs -> match xs with [NIL] -> BOOLV true | _ -> BOOLV false), funtype([listty alpha], boolty));
     ("CONS", TYPECONS (fun arg -> match arg with 
                                 | [TUPLEV [v; vs]] -> PAIR (v, vs)
-                                | _ -> raise (Ill_Typed "CONS applied to non-tuple")));
+                                | _ -> raise (Ill_Typed "CONS applied to non-tuple")),
+            funtype([tuplety [alpha; (listty alpha)]], (listty alpha)));
     ("NIL", TYPECONS (fun arg -> match arg with 
                                 | [] -> NIL
-                                | _ -> raise (Ill_Typed "NIL applied to args")))
+                                | _ -> raise (Ill_Typed "NIL applied to args")),
+            funtype([], (listty alpha)))
     ]
 (* 
   Environment association list of names to list of pattern constructors
 *)
-let datatypes = [("list", list_patterns); ("tuple", []);]
+let pi = [("list", list_patterns); ("tuple", []);]
+let delta = [("int", TYPE); ("bool", TYPE); ("string", TYPE); ("list", INWAITING ([TYPE], TYPE)); ]
 
 (*
     Environment of variables to their types
+
 *)
-let gamma = [("NIL", FORALL (["'a"], (funtype ([], listty (TYVAR "'a")))));
-            ("CONS",  FORALL (["'a"], (funtype ([tuplety [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a"))))));
-            ("TUPLE", degentype (funtype ([], TYCON "tuple")));]
+let (rho, gamma) = List.fold_left 
+                    (fun (r, g) (n, v, t) -> 
+                        ((n, v) :: r, (n, generalize [] t) :: g))
+                    ([], [])
+                    initial_basis
 
-let kind = [("int", TYPE); ("bool", TYPE); ("string", TYPE); ("list", INWAITING ([TYPE], TYPE)); ]
 
-let standard_lib = List.fold_left 
-                        (fun acc a -> (snd (eval_def (tokenize (parse a)) acc)) ) 
-                        initial_rho
+let interpret_def (rho, pi, delta, gamma) def = 
+    let (ty, _, gamma', str) = typeOfDef def gamma in
+    let (delta', pi') = intro_adt def pi delta in
+    let (value, rho') = eval_def def rho in
+    (value, scheme_to_string ty, rho', pi', delta', gamma')
+
+let (_, _, rho, pi, delta, gamma) = List.fold_left 
+                        (fun (_, _, r, p, d, g) line -> interpret_def (r, p, d, g) (tokenize (parse line)))
+                        (STRING "null", "null", rho, pi, delta, (gamma, []))
                         [
                             "val && = fn a b -> if a b false"; 
                             "val || = fn a b -> if a true b";
                             "val rec exists? = fn f xs -> if (null? xs) false (|| (f (car xs)) (exists? f (cdr xs)))";
                             "val rec all? = fn f xs -> if (null? xs) true (&& (f (car xs)) (all? f (cdr xs)))";
                         ] 
-                             
+
 (* 
     interpret_lines runs indefintely, 
     accepting input from stdin and parsing it 
 
     typeOfDef : (tyscheme, con, type env, output string)
 *)
-let rec interpret_lines rho pi delta = 
+let rec interpret_lines rho pi delta gamma = 
     let rec interpret () = 
         let _ = print_string "> " in 
         try 
             let tokens = (parse (read_line ())) in 
             let def = tokenize tokens in 
-            (* let (ty, _, gamma', str) = typeOfDef def gamma in *)
-            let (delta', pi') = intro_adt def pi delta in
-            let (value, rho') = eval_def def rho in
-            let () = print_endline (value_to_string value) in 
-            interpret_lines rho' pi' delta'
+            let (v, t, rho', pi', delta', gamma') = interpret_def (rho, pi, delta, gamma) def in 
+            let _ = print_endline (value_to_string v ^ " : " ^ t) in 
+            interpret_lines rho' pi' delta' gamma'
         with error -> 
             let _ = print_error error in 
             interpret ()
     in interpret ()
 
 
-let () = interpret_lines standard_lib datatypes kind
+let () = interpret_lines rho pi delta gamma
 
     
