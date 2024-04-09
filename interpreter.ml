@@ -826,7 +826,7 @@ let ftvsGamma(_, free) = free
 let findTyscheme s gamma = match gamma with
   | (env, free) ->
     let rec locate g = match g with
-    | []               -> raise (Cringe "var inference led to missing type scheme")
+    | []               -> raise (Cringe ("The variable " ^ s ^ " is not found") )
     | (s', scheme)::xs -> if s' = s then scheme else locate xs
     in locate env
 
@@ -952,10 +952,16 @@ let rec typeof exp g =
             let (endty, endc) = typeof b newG in (funtype ((List.map snd alphas), endty), endc)
 
         | LET(ds, e) -> 
-            let (defsC, finalGamma) = List.fold_left (fun (curC, curG) d -> 
-                let (_, nextC, nextG, _) = typeOfDef d curG in
-                (nextC, nextG)) (TRIVIAL, g) ds in
-                let (tau, expC) = typeof e finalGamma in (tau, expC ^^^ defsC) 
+            let (defsC, finalGamma) = 
+                List.fold_left 
+                    (fun (curC, curG) d -> 
+                        let (_, nextC, nextG, _) = typeOfDef d curG 
+                        in (nextC ^^^ curC, nextG)) 
+                    (TRIVIAL, g) 
+                    ds 
+            in
+            let (tau, expC) = typeof e finalGamma 
+            in (tau, expC ^^^ defsC) 
 
         | TUPLE(es) -> let (taus, c) = typesof es g in (tuplety taus, c)
 
