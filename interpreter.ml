@@ -760,8 +760,8 @@ let union xs ys = List.fold_left
       (fun acc x -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) ys xs
 let inter xs ys = List.fold_left
       (fun acc x -> if (List.exists (fun y -> y = x) ys) then x::acc else acc) [] xs
-let diff xs ys = List.fold_left
-      (fun acc x -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) [] xs
+let diff xs ys = List.fold_right
+      (fun x acc -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) xs []
 
 let (^^) t1 t2 = EQ (t1, t2)
 let (^^^) c1 c2 = CONJ (c1, c2)
@@ -854,10 +854,19 @@ let rec conjoin c = match c with
 
 let canonify ts = match ts with
   | FORALL(bound, tau) ->
+    (* (forall [t0, t1] ([([t1] -> t0), t1] -> t0)) *)
+    (* Creates the type variable name  *)
     let genTyvarName n = String.cat "t" (string_of_int n) in
+    (* freenut is the free type variables in the type scheme ts *)
     let freenut = diff (ftvs tau) bound in
+    (* 
+        Finds the integer of the first type variable that is not a member
+        of the free type variables in ts
+    *)
     let rec nextIdx n =
       if member (genTyvarName n) freenut then nextIdx (n + 1) else n in
+
+    (* Creates the canonified type variables  *)
     let rec newVars idx olds = match olds with
       | []    -> []
       | o::os -> let n = nextIdx idx in
