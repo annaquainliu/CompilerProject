@@ -119,6 +119,7 @@ let rec type_to_string = function
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
 let scheme_to_string = function 
+    | FORALL ([], tau) -> type_to_string tau
     | FORALL (alphas, tau) -> "(forall " ^ list_to_string (fun a -> a) alphas ^ " " ^ type_to_string tau ^ ")" 
 
 let type_error_inequality t1 t2 =
@@ -189,17 +190,17 @@ let rec def_to_string = function
                                     ^ ")"
         | (TUPLE exps) -> "TUPLE(" ^ (list_to_string exp_to_string exps) ^ ")"
     and value_to_string = function 
-        | (STRING s) -> "STRING(" ^ s ^ ")"
-        | (NUMBER n) -> "NUMBER(" ^ string_of_int n ^ ")"
-        | (BOOLV false) -> "BOOLV(false)"
-        | (BOOLV true) -> "BOOLV(true)"
-        | NIL -> "NIL"
+        | (STRING s) -> "\"" ^ s ^ "\""
+        | (NUMBER n) -> string_of_int n
+        | (BOOLV false) -> "false"
+        | (BOOLV true) -> "true"
+        | NIL -> "()"
         | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
         | (CLOSURE (LAMBDA (args, e), rho))  -> "<function>"
-        | (PRIMITIVE f) -> "PRIM"
-        | (TUPLEV l) -> "TUPLEV(" ^ (list_to_string value_to_string l) ^ ")"
-        | (TYPECONS f) -> "TYPECONS"
-        | (PATTERNV v) -> "PATTERNV(" ^ pattern_to_string v ^ ")"
+        | (PRIMITIVE f) -> "<function>"
+        | (TUPLEV l) -> "{" ^ (list_to_string value_to_string l) ^ "}"
+        | (TYPECONS f) -> "<cons>"
+        | (PATTERNV v) -> pattern_to_string v
         | _ -> "ERROR"
 and pattern_list_to_string = function 
         | [] -> ""

@@ -19,3 +19,8 @@ fn x a -> let val y = (x a) in y
 <function> : (forall [t0, t1] ([([t1] -> t0), t1] -> t0))
 
 <function> : (forall ['a 'b] (('a -> 'b) 'a -> 'b))
+
+(define member? (x ps) 
+	(if (null? ps) #f (if (= x (car ps)) #t (member? x (cdr ps)))))
+
+val rec member? = fn x ps -> if (null? ps) false (if (= x (car ps)) true (member? x (cdr ps)))
