@@ -814,6 +814,13 @@ let ftvs tau =
     | CONAPP(ty, tys) -> List.fold_left getftvs (getftvs curSet ty) tys
   in getftvs [] tau
 
+let rec ftvsConstraint c = 
+    let rec getftvs set = function 
+        | EQ (t1, t2) -> union (union (ftvs t1) (ftvs t2)) set 
+        | CONJ (c1, c2) -> union (ftvsConstraint c1) (ftvsConstraint c2)
+        | TRIVIAL -> []
+    in getftvs [] c
+
 let ftvsGamma(_, free) = free
 
 let findTyscheme s gamma = match gamma with
@@ -1007,8 +1014,8 @@ and typeOfDef d g =
       let (tau, c) = typeof e g in
       let theta = solve c in
       let crisps = inter (domain theta) (ftvsGamma g) in
-      let finalC = c ^^^ conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
-      let ligma = generalize (ftvsGamma g) ((tysubst theta) tau) in
+      let finalC = conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
+      let ligma = generalize (union (ftvsGamma g) (ftvsConstraint finalC)) ((tysubst theta) tau) in
       let newGamma = bindtyscheme(n, ligma, g) in
       (ligma, finalC, newGamma, "")
       
@@ -1020,9 +1027,9 @@ and typeOfDef d g =
       let (tau, c) = typeof e newGamma in
       let c2 = c ^^^ (alpha ^^ tau) in
       let theta = solve c2 in
-      let crisps = inter (domain theta) (ftvsGamma newGamma) in
-      let finalC = c2 ^^^ conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
-      let ligma = generalize (ftvsGamma newGamma) ((tysubst theta) tau) in
+      let crisps = inter (domain theta) (ftvsGamma g) in
+      let finalC = conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
+      let ligma = generalize (union (ftvsGamma g) (ftvsConstraint finalC)) ((tysubst theta) tau) in
       let finalGamma = bindtyscheme(n, ligma, g) in
       (ligma, finalC, finalGamma, "")
 
