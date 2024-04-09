@@ -7,6 +7,10 @@
 *)
 let pop_first_char input = String.sub input 1 ((String.length input) - 1)
 
+
+let pop_n_chars input n = String.sub input n ((String.length input) - n)
+
+
 let list_to_string f xs = 
     let rec stringify = function 
       |  []         -> ""
@@ -194,11 +198,24 @@ let rec def_to_string = function
         | (NUMBER n) -> string_of_int n
         | (BOOLV false) -> "false"
         | (BOOLV true) -> "true"
-        | NIL -> "()"
-        | (PAIR (e, v)) -> "PAIR(" ^ value_to_string e ^ ", " ^ value_to_string v ^ ")"
+        |  NIL -> "()"
+        | (PAIR (e, v)) -> 
+            let rec pair_to_str = function 
+                | (PAIR (f, NIL)) ->  value_to_string f ^ "]"
+                | (PAIR (f, vs)) -> 
+                    value_to_string f ^ ", " ^ (pair_to_str vs)
+                | _ -> raise (Runtime_Error "Ill formed list")
+            in "[" ^ (pair_to_str (PAIR (e, v))) 
         | (CLOSURE (LAMBDA (args, e), rho))  -> "<function>"
         | (PRIMITIVE f) -> "<function>"
-        | (TUPLEV l) -> "{" ^ (list_to_string value_to_string l) ^ "}"
+        | (TUPLEV l) -> "{" ^ 
+                        pop_n_chars 
+                        (List.fold_left 
+                            (fun acc v -> acc ^ ", " ^ (value_to_string v)) 
+                            "" 
+                            l ) 
+                        2
+                        ^ "}"
         | (TYPECONS f) -> "<cons>"
         | (PATTERNV v) -> pattern_to_string v
         | _ -> "ERROR"
@@ -729,9 +746,9 @@ and eval_def def rho =
         match def with 
         | LETDEF (name, exp) -> 
             if name <> "it" && List.exists (fun n -> n = name) (List.map fst rho) 
-            then raise (Runtime_Error  "LETDEF")
+            then raise (Runtime_Error ("Variable " ^ name ^ " already exists"))
             else let value = eval_exp exp rho in 
-                (value, (name, value)::rho)
+                (value_to_string value, (name, value)::rho)
         | LETREC (name, exp) -> (match exp with 
             | (LAMBDA _) -> 
                 if List.exists (fun n -> n = name) (List.map fst rho) 
@@ -740,14 +757,14 @@ and eval_def def rho =
                     in (match closure with 
                             | (CLOSURE (l, c)) -> 
                                 let rec rho' = (name, (CLOSURE (l, rho')))::rho in 
-                                ((CLOSURE (l, rho')), rho')
+                                (name, rho')
                             |  _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
             | _ -> raise (Ill_Typed "Expression in letrec is not a lambda"))
         | EXP e -> eval_def (LETDEF ("it", e)) rho
         | ADT (name, tyvars, cons) -> 
             let bindings = List.map eval_cons cons in
             let rho' = List.append bindings rho in 
-            (STRING (def_to_string def), rho')
+            (name, rho')
 (* 
    -----------------------------------------
         
@@ -1240,7 +1257,7 @@ let interpret_def (rho, pi, delta, gamma) def =
 
 let (_, _, rho, pi, delta, gamma) = List.fold_left 
                         (fun (_, _, r, p, d, g) line -> interpret_def (r, p, d, g) (tokenize (parse line)))
-                        (STRING "null", "null", rho, pi, delta, (gamma, []))
+                        ("null", "null", rho, pi, delta, (gamma, []))
                         [
                             "val && = fn a b -> if a b false"; 
                             "val || = fn a b -> if a true b";
@@ -1261,7 +1278,7 @@ let rec interpret_lines rho pi delta gamma =
             let tokens = (parse (read_line ())) in 
             let def = tokenize tokens in 
             let (v, t, rho', pi', delta', gamma') = interpret_def (rho, pi, delta, gamma) def in 
-            let _ = print_endline (value_to_string v ^ " : " ^ t) in 
+            let _ = print_endline (v ^ " : " ^ t) in 
             interpret_lines rho' pi' delta' gamma'
         with error -> 
             let _ = print_error error in 
