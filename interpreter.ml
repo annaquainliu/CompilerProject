@@ -120,7 +120,10 @@ let rec type_to_string = function
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
 let scheme_to_string = function 
     | FORALL (alphas, tau) -> "(forall " ^ list_to_string (fun a -> a) alphas ^ " " ^ type_to_string tau ^ ")" 
-  
+
+let type_error_inequality t1 t2 =
+    raise (Ill_Typed ("Cannot make " ^ (type_to_string t1) ^ " equivalent to " ^ (type_to_string t2)))
+
 type kind = TYPE | INWAITING of kind list * kind
 
 type exp = LITERAL of value
@@ -879,14 +882,18 @@ let rec solve c = match c with
   | EQ(t1, t2) -> match (t1, t2) with
     | (TYVAR a, TYVAR _)  -> a --> t2
     | (TYVAR a, TYCON _)   -> a --> t2
-    | (TYVAR a, CONAPP _)  -> if member a (ftvs t2) then raise typeInferenceBug else a --> t2
-    | (TYCON c1, TYCON c2) -> if c1 = c2 then [] else raise typeInferenceBug
-    | (TYCON _, CONAPP _)  -> raise typeInferenceBug
+    | (TYVAR a, CONAPP _)  -> 
+        if member a (ftvs t2) 
+        then type_error_inequality t1 t2
+        else a --> t2
+    | (TYCON c1, TYCON c2) -> if c1 = c2 then [] else type_error_inequality t1 t2
+    | (TYCON _, CONAPP _)  -> type_error_inequality t1 t2
     | (CONAPP(t1, t1s), CONAPP(t2, t2s)) -> 
         let rec zip l1 l2 acc = match (l1, l2) with
         | ([], [])       -> List.rev acc
         | (x::xs, y::ys) -> zip xs ys ((x, y)::acc)
-        | _              -> raise typeInferenceBug in
+        | _              -> raise typeInferenceBug 
+        in
         let zipped = zip t1s t2s [] in 
         List.fold_left(fun acc (t, t') -> compose(acc, solve(consubst acc (t ^^ t')))) (solve(t1 ^^ t2)) zipped
     | _                    -> solve (t2 ^^ t1)
