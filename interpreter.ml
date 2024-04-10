@@ -1031,7 +1031,7 @@ let rec typeof exp g =
             (*get first gamma, constraint, pTy, and eTy for folding later*)
             let (g1, c1, pTy1, rTy1) = 
               let (tyOfp1, cOfp1) = typeof (LITERAL(PATTERNV(p1))) g in
-              let (bindings1, cBindings) = extract_tau_params (cOfp1 ^^^ t0 ^^ tyOfp1) p1 tyOfp1 in
+              let (bindings1, cBindings) = extract_tau_params cOfp1 p1 tyOfp1 in
               let newG = appendGamma bindings1 g in 
               let result1ty, result1C = typeof e1 newG in
 
@@ -1039,7 +1039,7 @@ let rec typeof exp g =
 
             let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
               let (curPTy, curPC) = typeof (LITERAL(PATTERNV(curP))) g in (*shouldn't need curG here*)
-              let (curBindings, curBindingsC) = extract_tau_params (curPC ^^^ t0 ^^ curPTy) curP pTy1 in
+              let (curBindings, curBindingsC) = extract_tau_params curPC curP pTy1 in
               let nextG = appendGamma curBindings curG in
               let (curResTy, curResC) = typeof curE nextG in
               let nextC = curC ^^^ curBindingsC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ (t0 ^^ curPTy)  in
