@@ -1035,7 +1035,7 @@ let rec typeof exp g =
               let newG = appendGamma bindings1 g in 
               let result1ty, result1C = typeof e1 newG in
 
-              (newG, (c0 ^^^ result1C ^^^ cOfp1 ^^^ (t0 ^^ tyOfp1) ^^^ cBindings), tyOfp1, result1ty) in
+              (newG, (c0 ^^^ result1C ^^^ (t0 ^^ tyOfp1) ^^^ cBindings), tyOfp1, result1ty) in
 
             let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
               let (curPTy, curPC) = typeof (LITERAL(PATTERNV(curP))) g in (*shouldn't need curG here*)
