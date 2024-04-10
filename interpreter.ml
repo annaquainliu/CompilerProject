@@ -250,7 +250,10 @@ let get_fun_result = function
     | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
         result
     | _ -> raise (Ill_Typed "get_fun_result")
-    
+
+let get_fun_arg = function 
+    | CONAPP (TYCON "function", [arg; result]) -> arg 
+    | _ -> raise (Ill_Typed "get_fun_result")
 (* 
    Given a value, converts it into a pattern
 
@@ -554,18 +557,12 @@ let tokenize queue =
              cons::(tokenADT ())
         else [cons] 
     in 
-    let rec tokenList = function
-            | "]" -> NIL
-            |  x  -> match token x with
-                     | (LITERAL v) -> let rest = tokenList (Queue.pop queue) in 
-                                      PAIR (v, rest)
-                     | _  -> (raise (Ill_Typed "Cannot have non-values in list"))
-    and tokenPattern = function 
+    let rec tokenPattern = function 
             | "(" -> let name = Queue.pop queue in 
                     let cons_params = tokenWhileDelim ")" tokenPattern in 
                     let param = PATTERN (name, cons_params) in 
                     param
-            | "{" -> tuple_pattern (tokenWhileDelim "}" tokenPattern)
+            | "{" ->  tuple_pattern (tokenWhileDelim "}" tokenPattern) 
             | "false" -> VALUE (BOOLV false)
             | "true"  -> VALUE (BOOLV true)
             | "\"" -> let p = VALUE (STRING (Queue.pop queue)) in 
@@ -573,6 +570,12 @@ let tokenize queue =
             | x    ->  if (Str.string_match (Str.regexp "[0-9]+") x 0) 
                        then VALUE (NUMBER (int_of_string x))
                        else (GENERIC x)
+    and tokenList = function
+            | "]" -> NIL
+            |  x  -> match token x with
+                    | (LITERAL v) -> let rest = tokenList (Queue.pop queue) in 
+                                        PAIR (v, rest)
+                    | _  -> (raise (Ill_Typed "Cannot have non-values in list"))
     and tokenMatchCases () = 
             if (Queue.length queue) <> 0 && (Queue.peek queue) = "|"
             then let _ = Queue.pop queue in (* popping "|" *)
@@ -772,7 +775,9 @@ and eval_def def rho =
 
    -----------------------------------------
 *)
-
+let tuplety_args = function 
+    | (CONAPP (TYCON "tuple", taus)) -> taus
+    | _                              -> raise (Ill_Typed "Ill formed tuple type")
 let domain t = List.map (fun (x, _) -> x) t
 let union xs ys = List.fold_left
       (fun acc x -> if (List.exists (fun y -> y = x) ys) then acc else x::acc) ys xs
@@ -946,28 +951,40 @@ let rec printConstraint c = match c with
         let () = printConstraint c2 in print_string ")"
 
 let rec typeof exp g = 
-  (* 
+
+     (* 
         Given a patttern of a datatype constructor
         and the type of the constructor, return the
         bindings of the pattern generics mapped to their types
         + a constraint
 
-        pattern -> ty -> (string * ty) list * con
+        pattern -> ty -> con -> (string * ty_scheme) list
     *)
-    let extract_tau_params p tau = 
-        let rec extract p tau = 
-            (match p, tau with 
+    let rec extract p tau = 
+        (match p, tau with 
             | (GENERIC n), _ -> [(n, FORALL ([], tau))]
             | (PATTERN (_, ps)), (CONAPP (_, taus)) -> List.concat (List.map2 extract ps taus)
             | _ -> [])
-        in match p with 
-            | (GENERIC _) | (VALUE _) -> (extract p tau, TRIVIAL)
+    in 
+    let rec extract_tau_params cons p tau = 
+        match p with 
+            | (GENERIC _) | (VALUE _) -> ((extract p tau), TRIVIAL)
+            | (PATTERN ("TUPLE", ps)) -> 
+                List.fold_right2
+                    (fun p t (bs, c) -> 
+                        let (bindings, c') = extract_tau_params cons p t in 
+                        (List.append bs bindings, c ^^^ c'))
+                    ps 
+                    (tuplety_args tau)
+                    ([], TRIVIAL)
             | (PATTERN (x, ps)) -> 
-                let instantiated = freshInstance (findTyscheme x g) in 
-                match instantiated with
-                | (CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); ret_ty])) -> 
-                     (extract p instantiated, ret_ty ^^ tau)
-                | _ -> raise (Ill_Typed "Pattern constructor does not have a function type.")
+                let funty = freshInstance (findTyscheme x g) in
+                let ret_ty = get_fun_result funty in 
+                let c_final = (ret_ty ^^ tau) ^^^ cons in 
+                let theta = solve c_final in 
+                let sub_tau = tysubst theta funty in 
+                let sub_tau_args = get_fun_arg sub_tau in
+                (extract p sub_tau_args, ret_ty ^^ tau)
     in 
     let rec infer ex = match ex with
         | LITERAL(value) -> inferLiteral value
@@ -997,9 +1014,9 @@ let rec typeof exp g =
             let (tau, expC) = typeof e finalGamma 
             in (tau, expC ^^^ defsC) 
 
-        | TUPLE(es) -> let (taus, c) = typesof es g in (tuplety taus, c)
+        | TUPLE(es) -> let (taus, c) = typesof es in (tuplety taus, c)
 
-        | APPLY(f, es) -> (match (typesof (f::es) g) with
+        | APPLY(f, es) -> (match (typesof (f::es)) with
             | ([], _) -> raise (Cringe "invalid")
             | (fty::etys, con) -> 
                 let crisp = freshtyvar() in
@@ -1014,35 +1031,66 @@ let rec typeof exp g =
             (*get first gamma, constraint, pTy, and eTy for folding later*)
             let (g1, c1, pTy1, rTy1) = 
               let (tyOfp1, cOfp1) = typeof (LITERAL(PATTERNV(p1))) g in
-              let (bindings1, extract1C) = extract_tau_params p1 tyOfp1 in
+              let (bindings1, cBindings) = extract_tau_params (cOfp1 ^^^ t0 ^^ tyOfp1) p1 tyOfp1 in
               let newG = appendGamma bindings1 g in 
               let result1ty, result1C = typeof e1 newG in
-              (newG, (c0 ^^^ cOfp1 ^^^ extract1C ^^^ result1C ^^^ (tyOfp1 ^^ t0)), tyOfp1, result1ty) in
+
+              (newG, (c0 ^^^ result1C ^^^ cOfp1 ^^^ (t0 ^^ tyOfp1) ^^^ cBindings), tyOfp1, result1ty) in
 
             let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
               let (curPTy, curPC) = typeof (LITERAL(PATTERNV(curP))) g in (*shouldn't need curG here*)
-              let (curBindings, curExtractC) = extract_tau_params curP pTy1 in
+              let (curBindings, curBindingsC) = extract_tau_params (curPC ^^^ t0 ^^ curPTy) curP pTy1 in
               let nextG = appendGamma curBindings curG in
               let (curResTy, curResC) = typeof curE nextG in
-              let nextC = curC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ curExtractC ^^^ curPC in
+              let nextC = curC ^^^ curBindingsC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ (t0 ^^ curPTy)  in
               (nextG, nextC)
             ) (g1, c1) pairs in
             (rTy1, finalC)
           | _ -> raise (Ill_Typed "bad match inference"))
+    (* 
+       Given a pattern, determine the type of the pattern w/ constraints
 
+       pattern -> ty * con
+    *)
+    and infer_pattern = function 
+        | VALUE v           -> inferLiteral v
+        | GENERIC _         -> (freshtyvar (), TRIVIAL)
+        | PATTERN ("TUPLE", ps) -> 
+            let (ps_taus, c) = patterns_of ps in 
+            (tuplety ps_taus, c)
+        | PATTERN (n, ps)   -> 
+            let fresh_tau = freshInstance (findTyscheme n g) in
+            let pattern_tau = freshtyvar () in 
+            let (ps_taus, c) = patterns_of ps in 
+            let c' = c ^^^ fresh_tau ^^ funtype (ps_taus, pattern_tau) in 
+            (pattern_tau, c')
+    and patterns_of ps = 
+        List.fold_right 
+            (fun p (ts, c) -> 
+                let (t, curr_c ) = infer_pattern p in 
+                (t::ts, curr_c ^^^ c)) 
+                ps 
+                ([], TRIVIAL)
     and inferLiteral v = match v with
         | STRING(_) -> (strty, TRIVIAL)
         | NUMBER(_) -> (intty, TRIVIAL)
         | BOOLV(_) -> (boolty, TRIVIAL)
         | NIL -> (freshInstance (FORALL (["a"], listty (TYVAR "a"))), TRIVIAL)
+        | TUPLEV (vs) -> let (taus, c) = typesof (List.map (fun v -> LITERAL v) vs)
+                        in (tuplety taus, c) 
         | PAIR(e, v) -> 
             let (t1, c1) = infer (LITERAL e) in
             let (t2, c2) = infer (LITERAL v) in
             (t2, c1 ^^^ c2 ^^^ (listty t1 ^^ t2))
-        | _ -> (boolty, TRIVIAL)
-    and typesof es g = List.fold_right (fun e (ts, c) ->
-            let (curty, curc) = typeof e g in
-            (curty::ts, c ^^^ curc)) es ([], TRIVIAL) 
+        | PATTERNV p -> infer_pattern p  
+        | _ ->  raise (Ill_Typed "Ill-formed literal!")
+    and typesof es = 
+        List.fold_right 
+            (fun e (ts, c) ->
+                let (curty, curc) = infer e in
+                (curty::ts, c ^^^ curc)) 
+            es 
+            ([], TRIVIAL) 
 
   in infer exp
 
