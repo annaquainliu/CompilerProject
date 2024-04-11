@@ -1123,7 +1123,32 @@ and typeOfDef d g =
 
     | EXP(e) -> typeOfDef (LETDEF ("it", e)) g
 
-    | ADT(name, alphas, cs) -> raise (Ill_Typed "Not implemented yet")
+    | ADT(name, alphas, cs) -> 
+       let rec noneInGamma xs = (*throw error if invalid name in xs*)
+         let (env, free) = g in
+         let dmn = domain env in
+         let ans = List.for_all (fun x -> not (List.exists (fun y -> x = y) dmn)) xs in
+         if ans then true else raise (Ill_Typed "constructor name already in gamma")
+       and get_c_names cs acc = match cs with
+        | [] -> acc
+        | c1 :: others -> (match c1 with 
+         | UNARYCONS(str, ty) -> str::acc
+         | NULLCONS(str) -> str::acc)
+       and extendGamma curG curC = (match curC with
+        | UNARYCONS(str, ty) -> bindtyscheme (str, 
+               FORALL (alphas, funtype([ty], CONAPP(TYCON str, (List.map (fun a -> TYVAR a) alphas)))), curG)
+        | NULLCONS(str) -> bindtyscheme (str, FORALL (alphas, funtype([], CONAPP(TYCON str, (List.map (fun a -> TYVAR a) alphas)))), curG))
+       and uniqueTyvarsOrError crisps = 
+         let rec countInstances x l ct = (match l with
+          | [] -> ct
+          | y::ys -> if y = x then countInstances x ys (ct + 1) else countInstances x ys ct) in
+         let valid = (List.for_all (fun cr -> (countInstances cr crisps 0) = 1) crisps) in
+         if valid then true else raise (Ill_Typed "tyvars not unique") in
+       let cNames = get_c_names cs [] in
+       let _ = noneInGamma cNames in (*check for errors here*)
+       let _ = uniqueTyvarsOrError alphas in
+       let finalG = List.fold_left(fun curG curC -> extendGamma curG curC) g cs in
+       (FORALL ([], intty), TRIVIAL, finalG, "")
   in inferDef d
 
 let printExpType e =
