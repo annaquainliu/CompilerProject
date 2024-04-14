@@ -101,7 +101,7 @@ let intty = TYCON "int"
 let boolty = TYCON "bool"
 let strty = TYCON "string"
 let listty t = CONAPP(TYCON "list", [t])
-let tuplety list = CONAPP (TYCON "tuple", list)
+let tuplety list = CONAPP (TYCON "*", list)
 let funtype (args, result) =
   CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result])
 
@@ -776,7 +776,7 @@ and eval_def def rho =
    -----------------------------------------
 *)
 let tuplety_args = function 
-    | (CONAPP (TYCON "tuple", taus)) -> taus
+    | (CONAPP (TYCON "*", taus)) -> taus
     | _                              -> raise (Ill_Typed "Ill formed tuple type")
 let domain t = List.map (fun (x, _) -> x) t
 let union xs ys = List.fold_left
@@ -1211,7 +1211,7 @@ let asType delta tau = (match kindOf tau delta with
    type_to_pattern : tau -> pattern
 *)
 let type_to_pattern = function 
-    | (CONAPP (TYCON "tuple", taus)) -> PATTERN ("TUPLE", List.map (fun _ -> GENERIC "_") taus)
+    | (CONAPP (TYCON "*", taus)) -> PATTERN ("TUPLE", List.map (fun _ -> GENERIC "_") taus)
     | _                              -> GENERIC "_"
 
 (* 
@@ -1308,7 +1308,7 @@ let initial_basis =
 (* 
   Environment association list of names to list of pattern constructors
 *)
-let pi = [("list", list_patterns); ("tuple", []);]
+let pi = [("list", list_patterns); ("*", []);]
 let delta = [("int", TYPE); ("bool", TYPE); ("string", TYPE); ("list", INWAITING ([TYPE], TYPE)); ]
 
 (*
