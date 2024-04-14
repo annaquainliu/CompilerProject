@@ -543,7 +543,7 @@ let tokenize queue =
                  CONAPP (tau, taus)
         |  tau  -> if tau.[0] = '\''
                    then TYVAR (pop_first_char tau)
-                   else TYCON tau  
+                   else CONAPP (TYCON tau, [])
     in 
     let rec tokenADT () = 
         let name = Queue.pop queue in 
@@ -1236,10 +1236,7 @@ let intro_adt d pi delta = match d with
         if List.exists eq_name pi || List.exists eq_name delta
         then raise (Ill_Typed ("The datatype already exists."))
         else 
-        let kind = match alphas with 
-                    | [] -> TYPE 
-                    | _  -> INWAITING (List.map (fun _ -> TYPE) alphas, TYPE)
-        in
+        let kind = INWAITING (List.map (fun _ -> TYPE) alphas, TYPE) in
         let bs = (name, kind)::(List.map (fun a -> (a, TYPE)) alphas) in 
         let delta' = List.append bs delta in 
         let curry_as_type = asType delta' in
