@@ -120,6 +120,7 @@ let rec type_to_string = function
     | TYCON(c) -> c
     | CONAPP (TYCON "function", [CONAPP (TYCON "arguments", args); result]) -> 
         "(" ^ list_to_string type_to_string args ^ " -> " ^ type_to_string result ^ ")"
+    | CONAPP (ty, []) -> type_to_string ty
     | CONAPP(tc, taus) ->
          "(" ^ type_to_string tc ^ " " ^ list_to_string type_to_string taus ^ ")"
 let scheme_to_string = function 
@@ -766,7 +767,7 @@ and eval_def def rho =
         | ADT (name, tyvars, cons) -> 
             let bindings = List.map eval_cons cons in
             let rho' = List.append bindings rho in 
-            (name, rho')
+            ("datatype", rho')
 (* 
    -----------------------------------------
         
@@ -1179,7 +1180,7 @@ let rec eqKind k k' = match k, k' with
 let kindOf tau delta = 
     let rec kind = function 
         | (TYCON name) | (TYVAR name) -> lookup name delta
-        | (CONAPP (TYCON "tuple", taus)) -> 
+        | (CONAPP (TYCON "*", taus)) -> 
             if (List.for_all (fun t -> kind t = TYPE) taus)
             then TYPE
             else raise (Ill_Typed ("Tried to apply tuple type to invalid types")) 
