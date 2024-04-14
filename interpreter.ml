@@ -1124,6 +1124,7 @@ and typeOfDef d g =
     | EXP(e) -> typeOfDef (LETDEF ("it", e)) g
 
     | ADT(name, alphas, cs) -> 
+       let new_tau =  CONAPP(TYCON name, (List.map (fun a -> TYVAR a) alphas)) in
        let rec noneInGamma xs = (*throw error if invalid name in xs*)
          let (env, free) = g in
          let dmn = domain env in
@@ -1132,12 +1133,12 @@ and typeOfDef d g =
        and get_c_names cs acc = match cs with
         | [] -> acc
         | c1 :: others -> (match c1 with 
-         | UNARYCONS(str, ty) -> str::acc
-         | NULLCONS(str) -> str::acc)
+            | UNARYCONS(str, ty) -> str::acc
+            | NULLCONS(str) -> str::acc)
        and extendGamma curG curC = (match curC with
         | UNARYCONS(str, ty) -> bindtyscheme (str, 
-               FORALL (alphas, funtype([ty], CONAPP(TYCON str, (List.map (fun a -> TYVAR a) alphas)))), curG)
-        | NULLCONS(str) -> bindtyscheme (str, FORALL (alphas, funtype([], CONAPP(TYCON str, (List.map (fun a -> TYVAR a) alphas)))), curG))
+               FORALL (alphas, funtype([ty], new_tau)), curG)
+        | NULLCONS(str) -> bindtyscheme (str, FORALL (alphas, funtype([], new_tau)), curG))
        and uniqueTyvarsOrError crisps = 
          let rec countInstances x l ct = (match l with
           | [] -> ct
@@ -1147,8 +1148,8 @@ and typeOfDef d g =
        let cNames = get_c_names cs [] in
        let _ = noneInGamma cNames in (*check for errors here*)
        let _ = uniqueTyvarsOrError alphas in
-       let finalG = List.fold_left(fun curG curC -> extendGamma curG curC) g cs in
-       (FORALL ([], intty), TRIVIAL, finalG, "")
+       let finalG = List.fold_left extendGamma g cs in
+       (FORALL (alphas, new_tau), TRIVIAL, finalG, "")
   in inferDef d
 
 let printExpType e =
