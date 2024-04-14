@@ -722,8 +722,7 @@ let rec eval_exp exp rho =
                     | (CLOSURE (LAMBDA (names, body), copy_rho)) -> 
                         let rho' = List.append (zip names values) copy_rho in 
                         eval_exp body rho'
-                    | (PRIMITIVE f) -> f values
-                    | (TYPECONS f) -> f values
+                    | (PRIMITIVE f) | (TYPECONS f) -> f values
                     | _ -> raise (Ill_Typed "Cannot apply non-function."))
         | (LAMBDA (names, body)) -> 
             let rho_names = List.map fst rho in 
@@ -1232,7 +1231,6 @@ let constructor_to_pattern = function
 *)
 let intro_adt d pi delta = match d with 
     | ADT (name, alphas, cs) -> 
-        let _ = print_endline (def_to_string d) in
         let eq_name = fun (n, _) -> name = n in
         if List.exists eq_name pi || List.exists eq_name delta
         then raise (Ill_Typed ("The datatype already exists."))
