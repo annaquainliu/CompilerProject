@@ -1012,7 +1012,6 @@ let asType delta tau = (match kindOf tau delta with
     | _    -> raise (Ill_Typed (String.cat (type_to_string tau) " is waiting for another type.")))
 
 let rec typeof exp g delta pi = 
-
      (* 
         Given a patttern of a datatype constructor
         and the type of the constructor, return the
