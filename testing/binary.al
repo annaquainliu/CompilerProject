@@ -1,5 +1,5 @@
 datatype bit = ZEROBIT | ONEBIT
-datatype binary = ZERO | TWICE_PLUS of (* bit binary)
+datatype binary = ZERO | TWICE_PLUS of (* binary bit)
 
 val rec int_of_binary = 
     fn n -> match n with 

@@ -950,7 +950,68 @@ let rec printConstraint c = match c with
         let () = print_string " ^^^ " in
         let () = printConstraint c2 in print_string ")"
 
-let rec typeof exp g = 
+
+(* 
+   -----------------------------------------
+        
+    -------  Datatype Evaluation -------  
+
+   -----------------------------------------
+*)
+(* 
+   Given a type, returns the most general pattern of the type
+
+   type_to_pattern : tau -> pattern
+*)
+let type_to_pattern = function 
+    | (CONAPP (TYCON "*", taus)) -> PATTERN ("TUPLE", List.map (fun _ -> GENERIC "_") taus)
+    | _                              -> GENERIC "_"
+
+(* 
+   Given a constructor of some datatype, returns the most general pattern 
+   of the constructor
+
+    constructor_to_pattern : constructor -> pattern
+*)
+let constructor_to_pattern = function 
+    | (NULLCONS name) -> PATTERN (name, [])
+    | (UNARYCONS (name, tau)) -> PATTERN (name, [type_to_pattern tau])
+
+(* 
+   -----------------------------------------
+        
+    -------  KINDING! -------  
+
+   -----------------------------------------
+*)
+let rec eqKind k k' = match k, k' with 
+    | (TYPE, TYPE) -> true
+    | (INWAITING (ks, k), INWAITING (ks', k')) -> eqKind k k' && (List.for_all2 eqKind ks ks')
+    | _             -> false
+
+
+let kindOf tau delta = 
+    let rec kind = function 
+        | (TYCON name) | (TYVAR name) -> lookup name delta
+        | (CONAPP (TYCON "*", taus)) -> 
+            if (List.for_all (fun t -> kind t = TYPE) taus)
+            then TYPE
+            else raise (Ill_Typed ("Tried to apply tuple type to invalid types")) 
+        | (CONAPP (tau, taus)) -> 
+            (match kind tau with 
+                | INWAITING (kinds, result_kind) -> 
+                    if List.for_all2 eqKind kinds (List.map kind taus)
+                    then result_kind
+                    else raise (Ill_Typed "Tried to apply type constructor with wrong/unequal types.")
+                | _                 -> raise (Ill_Typed "Tried to apply non-type constructor with types."))
+        
+    in kind tau
+
+let asType delta tau = (match kindOf tau delta with 
+    | TYPE -> true
+    | _    -> raise (Ill_Typed (String.cat (type_to_string tau) " is waiting for another type.")))
+
+let rec typeof exp g delta pi = 
 
      (* 
         Given a patttern of a datatype constructor
@@ -1000,18 +1061,19 @@ let rec typeof exp g =
         | LAMBDA(formals, b) -> 
             let alphas = List.map (fun form -> (form, freshtyvar())) formals in
             let newG = List.fold_left (fun acc (x, c) -> bindtyscheme (x, FORALL ([], c), acc)) g alphas in
-            let (endty, endc) = typeof b newG in (funtype ((List.map snd alphas), endty), endc)
+            let (endty, endc) = typeof b newG delta pi 
+            in (funtype ((List.map snd alphas), endty), endc)
 
         | LET(ds, e) -> 
             let (defsC, finalGamma) = 
                 List.fold_left 
                     (fun (curC, curG) d -> 
-                        let (_, nextC, nextG, _) = typeOfDef d curG 
+                        let (_, nextC, nextG, _, _, _) = typeOfDef d curG delta pi
                         in (nextC ^^^ curC, nextG)) 
                     (TRIVIAL, g) 
                     ds 
             in
-            let (tau, expC) = typeof e finalGamma 
+            let (tau, expC) = typeof e finalGamma delta pi
             in (tau, expC ^^^ defsC) 
 
         | TUPLE(es) -> let (taus, c) = typesof es in (tuplety taus, c)
@@ -1027,21 +1089,21 @@ let rec typeof exp g =
           | (p1, e1)::pairs -> 
             let appendGamma bindings g = 
               List.fold_left (fun curG (x, ts) -> bindtyscheme (x, ts, curG)) g bindings in
-            let (t0, c0) = typeof exp1 g in
+            let (t0, c0) = typeof exp1 g delta pi in
             (*get first gamma, constraint, pTy, and eTy for folding later*)
             let (g1, c1, pTy1, rTy1) = 
-              let (tyOfp1, cOfp1) = typeof (LITERAL(PATTERNV(p1))) g in
+              let (tyOfp1, cOfp1) = infer (LITERAL(PATTERNV(p1))) in
               let (bindings1, cBindings) = extract_tau_params cOfp1 p1 tyOfp1 in
               let newG = appendGamma bindings1 g in 
-              let result1ty, result1C = typeof e1 newG in
+              let result1ty, result1C = typeof e1 newG delta pi in
 
               (newG, (c0 ^^^ result1C ^^^ (t0 ^^ tyOfp1) ^^^ cBindings), tyOfp1, result1ty) in
 
             let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
-              let (curPTy, curPC) = typeof (LITERAL(PATTERNV(curP))) g in (*shouldn't need curG here*)
+              let (curPTy, curPC) = infer (LITERAL(PATTERNV(curP))) in (*shouldn't need curG here*)
               let (curBindings, curBindingsC) = extract_tau_params curPC curP pTy1 in
               let nextG = appendGamma curBindings curG in
-              let (curResTy, curResC) = typeof curE nextG in
+              let (curResTy, curResC) = typeof curE nextG delta pi in
               let nextC = curC ^^^ curBindingsC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ (t0 ^^ curPTy)  in
               (nextG, nextC)
             ) (g1, c1) pairs in
@@ -1096,32 +1158,58 @@ let rec typeof exp g =
 
 
 (* (tyscheme, con, type env, output string) *)
-and typeOfDef d g = 
-  let rec inferDef def = match def with 
+and typeOfDef d g delta pi = 
+    (* 
+        Given a datatype definition, introduce the defintion into
+        the Pi and Delta environment.
+
+        def -> (string * pattern list) -> (string * kind) -> 
+                (string * pattern list) * (string * kind)
+    *)
+    let intro_adt d = match d with 
+        | ADT (name, alphas, cs) -> 
+            let eq_name = fun (n, _) -> name = n in
+            if List.exists eq_name pi || List.exists eq_name delta
+            then raise (Ill_Typed ("The datatype already exists."))
+            else 
+            let kind = INWAITING (List.map (fun _ -> TYPE) alphas, TYPE) in
+            let bs = (name, kind)::(List.map (fun a -> (a, TYPE)) alphas) in 
+            let delta' = List.append bs delta in 
+            let curry_as_type = asType delta' in
+            let _ = List.for_all (fun c -> match c with 
+                                    | (NULLCONS _) -> true 
+                                    | (UNARYCONS (name, tau)) -> curry_as_type tau) 
+                    cs
+            in
+            let ps = List.map constructor_to_pattern cs in
+            ((name, kind)::delta, (name, ps)::pi)
+        | _ -> raise (Ill_Typed "Impossible")
+    in
+   let rec inferDef def = match def with 
     | LETDEF(n, e) -> 
-      let (tau, c) = typeof e g in
+      let (tau, c) = typeof e g delta pi in
       let theta = solve c in
       let crisps = inter (domain theta) (ftvsGamma g) in
       let finalC = conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
       let ligma = generalize (union (ftvsGamma g) (ftvsConstraint finalC)) ((tysubst theta) tau) in
       let newGamma = bindtyscheme(n, ligma, g) in
-      (ligma, finalC, newGamma, "")
+      (ligma, finalC, newGamma, "", delta, pi)
       
     (* possible bug due to using newGamma underneath its definition? type rules say to use gamma *)
     | LETREC(n, e) -> 
       let _ = confirmLambda e in
       let alpha = freshtyvar() in
       let newGamma = bindtyscheme(n, FORALL([], alpha), g) in
-      let (tau, c) = typeof e newGamma in
+      let (tau, c) = typeof e newGamma delta pi in
       let c2 = c ^^^ (alpha ^^ tau) in
       let theta = solve c2 in
       let crisps = inter (domain theta) (ftvsGamma g) in
       let finalC = conjoin(List.map (fun x -> TYVAR x ^^ varsubst theta x) crisps) in
       let ligma = generalize (union (ftvsGamma g) (ftvsConstraint finalC)) ((tysubst theta) tau) in
       let finalGamma = bindtyscheme(n, ligma, g) in
-      (ligma, finalC, finalGamma, "")
+      (ligma, finalC, finalGamma, "", delta, pi)
 
-    | EXP(e) -> typeOfDef (LETDEF ("it", e)) g
+    | EXP(e) -> inferDef (LETDEF ("it", e))
 
     | ADT(name, alphas, cs) -> 
        let new_tau =  CONAPP(TYCON name, (List.map (fun a -> TYVAR a) alphas)) in
@@ -1149,106 +1237,27 @@ and typeOfDef d g =
        let _ = noneInGamma cNames in (*check for errors here*)
        let _ = uniqueTyvarsOrError alphas in
        let finalG = List.fold_left extendGamma g cs in
-       (FORALL (alphas, new_tau), TRIVIAL, finalG, "")
+       let (delta', pi') = intro_adt def in
+       (FORALL (alphas, new_tau), TRIVIAL, finalG, "", delta', pi')
   in inferDef d
 
 let printExpType e =
-    let (tau, _) = typeof e ([], []) in let () = printType tau in print_endline ""
+    let (tau, _) = typeof e ([], []) [] []
+    in let () = printType tau in print_endline ""
 
 (*returns string forms of type and constraint*)
 let debugExpType e = 
-  let (tau, c) = typeof e ([], []) in
-  let () = printType tau in let () = print_string ", " in let () = printConstraint c in print_endline ""
+  let (tau, c) = typeof e ([], []) [] [] in
+  let () = printType tau in 
+  let () = print_string ", " in 
+  let () = printConstraint c in 
+  print_endline ""
 
 (* let _ = print_endline (list_to_string 
                             (fun (n, t) -> "(" ^ n ^ ", " ^ type_to_string t ^ ")") 
                             (extract_tau_params (cons (VALUE (NUMBER 56)) (GENERIC "xs")) 
                                                 (funtype ([tuple [(TYVAR "'a"); (listty (TYVAR "'a"))]], (listty (TYVAR "'a")))))) *)
-(* 
-   -----------------------------------------
-        
-    -------  KINDING! -------  
 
-   -----------------------------------------
-*)
-let rec eqKind k k' = match k, k' with 
-    | (TYPE, TYPE) -> true
-    | (INWAITING (ks, k), INWAITING (ks', k')) -> eqKind k k' && (List.for_all2 eqKind ks ks')
-    | _             -> false
-
-
-let kindOf tau delta = 
-    let rec kind = function 
-        | (TYCON name) | (TYVAR name) -> lookup name delta
-        | (CONAPP (TYCON "*", taus)) -> 
-            if (List.for_all (fun t -> kind t = TYPE) taus)
-            then TYPE
-            else raise (Ill_Typed ("Tried to apply tuple type to invalid types")) 
-        | (CONAPP (tau, taus)) -> 
-            (match kind tau with 
-                | INWAITING (kinds, result_kind) -> 
-                    if List.for_all2 eqKind kinds (List.map kind taus)
-                    then result_kind
-                    else raise (Ill_Typed "Tried to apply type constructor with wrong/unequal types.")
-                | _                 -> raise (Ill_Typed "Tried to apply non-type constructor with types."))
-        
-    in kind tau
-
-let asType delta tau = (match kindOf tau delta with 
-    | TYPE -> true
-    | _    -> raise (Ill_Typed (String.cat (type_to_string tau) " is waiting for another type.")))
-
-(* 
-   -----------------------------------------
-        
-    -------  Datatype Evaluation -------  
-
-   -----------------------------------------
-*)
-(* 
-   Given a type, returns the most general pattern of the type
-
-   type_to_pattern : tau -> pattern
-*)
-let type_to_pattern = function 
-    | (CONAPP (TYCON "*", taus)) -> PATTERN ("TUPLE", List.map (fun _ -> GENERIC "_") taus)
-    | _                              -> GENERIC "_"
-
-(* 
-   Given a constructor of some datatype, returns the most general pattern 
-   of the constructor
-
-    constructor_to_pattern : constructor -> pattern
-*)
-let constructor_to_pattern = function 
-    | (NULLCONS name) -> PATTERN (name, [])
-    | (UNARYCONS (name, tau)) -> PATTERN (name, [type_to_pattern tau])
-(* 
-   Given a datatype definition, introduce the defintion into
-   the Pi and Delta environment.
-
-   def -> (string * pattern list) -> (string * kind) -> 
-        (string * pattern list) * (string * kind)
-*)
-let intro_adt d pi delta = match d with 
-    | ADT (name, alphas, cs) -> 
-        let eq_name = fun (n, _) -> name = n in
-        if List.exists eq_name pi || List.exists eq_name delta
-        then raise (Ill_Typed ("The datatype already exists."))
-        else 
-        let kind = INWAITING (List.map (fun _ -> TYPE) alphas, TYPE) in
-        let bs = (name, kind)::(List.map (fun a -> (a, TYPE)) alphas) in 
-        let delta' = List.append bs delta in 
-        let curry_as_type = asType delta' in
-        let _ = List.for_all (fun c -> match c with 
-                                | (NULLCONS _) -> true 
-                                | (UNARYCONS (name, tau)) -> curry_as_type tau) 
-                cs
-        in
-        let ps = List.map constructor_to_pattern cs in
-        let pi' = (name, ps)::pi in  
-        ((name, kind)::delta, pi')
-    | _      -> (delta, pi)
 
 (* 
    -----------------------------------------
@@ -1320,8 +1329,7 @@ let (rho, gamma) = List.fold_left
 
 
 let interpret_def (rho, pi, delta, gamma) def = 
-    let (ty, _, gamma', str) = typeOfDef def gamma in
-    let (delta', pi') = intro_adt def pi delta in
+    let (ty, _, gamma', str, delta', pi') = typeOfDef def gamma delta pi in
     let (value, rho') = eval_def def rho in
     (value, scheme_to_string ty, rho', pi', delta', gamma')
 
