@@ -226,6 +226,7 @@ and pattern_list_to_string = function
         | (x::xs) -> (pattern_to_string x) ^ ", " ^ pattern_list_to_string xs
 and pattern_to_string = function 
         | (GENERIC x) -> x
+        | PATTERN ("TUPLE", list) -> "{" ^ pattern_list_to_string list ^ "}"
         | PATTERN (name, list) -> 
             (match list with 
             | [] ->  name
@@ -420,7 +421,7 @@ let validate_patterns user_patterns datatypes gamma =
     Receives constructor names of the type with a constructor name
     string -> (pattern list)
 *)
-let rec get_constructors name =
+let rec get_constructors name = 
     match lookup name gamma with 
         | FORALL (_, tau) -> 
             (let name = 
@@ -582,7 +583,7 @@ let tokenize queue =
             then let _ = Queue.pop queue in (* popping "|" *)
                  let patterns = tokenWhileDelim "=" tokenPattern in
                  let exp  = token (Queue.pop queue) in
-                  (tuple_pattern patterns, exp)::(tokenMatchCases ())
+                  (PATTERN ("PARAMETERS", patterns), exp)::(tokenMatchCases ())
             else []
     and token = function 
             | "fn"  ->  let names = tokenWhileDelim "->" (fun s -> s) in 
@@ -1029,22 +1030,23 @@ let rec typeof exp g delta pi =
     let rec extract_tau_params cons p tau = 
         match p with 
             | (GENERIC _) | (VALUE _) -> ((extract p tau), TRIVIAL)
-            | (PATTERN ("TUPLE", ps)) -> 
-                List.fold_right2
+            | (PATTERN (x, ps)) -> match x with 
+                | "TUPLE" | "PARAMETERS" -> 
+                    List.fold_right2
                     (fun p t (bs, c) -> 
                         let (bindings, c') = extract_tau_params cons p t in 
                         (List.append bs bindings, c ^^^ c'))
                     ps 
                     (tuplety_args tau)
                     ([], TRIVIAL)
-            | (PATTERN (x, ps)) -> 
-                let funty = freshInstance (findTyscheme x g) in
-                let ret_ty = get_fun_result funty in 
-                let c_final = (ret_ty ^^ tau) ^^^ cons in 
-                let theta = solve c_final in 
-                let sub_tau = tysubst theta funty in 
-                let sub_tau_args = get_fun_arg sub_tau in
-                (extract p sub_tau_args, ret_ty ^^ tau)
+                | _ ->
+                    let funty = freshInstance (findTyscheme x g) in
+                    let ret_ty = get_fun_result funty in 
+                    let c_final = (ret_ty ^^ tau) ^^^ cons in 
+                    let theta = solve c_final in 
+                    let sub_tau = tysubst theta funty in 
+                    let sub_tau_args = get_fun_arg sub_tau in
+                    (extract p sub_tau_args, ret_ty ^^ tau)
     in 
     let rec infer ex = match ex with
         | LITERAL(value) -> inferLiteral value
@@ -1084,30 +1086,36 @@ let rec typeof exp g delta pi =
                 let c = con ^^^ fty ^^ (funtype (etys, crisp)) in 
                 (crisp, c))
 
-        | MATCH (exp1, ps_exps) -> (match ps_exps with
-          | (p1, e1)::pairs -> 
-            let appendGamma bindings g = 
-              List.fold_left (fun curG (x, ts) -> bindtyscheme (x, ts, curG)) g bindings in
-            let (t0, c0) = typeof exp1 g delta pi in
-            (*get first gamma, constraint, pTy, and eTy for folding later*)
-            let (g1, c1, pTy1, rTy1) = 
-              let (tyOfp1, cOfp1) = infer (LITERAL(PATTERNV(p1))) in
-              let (bindings1, cBindings) = extract_tau_params cOfp1 p1 tyOfp1 in
-              let newG = appendGamma bindings1 g in 
-              let result1ty, result1C = typeof e1 newG delta pi in
+        | MATCH (exp1, ps_exps) -> 
+            let result = 
+            (match ps_exps with
+                | (p1, e1)::pairs -> 
+                    let appendGamma bindings g = 
+                    List.fold_left (fun curG (x, ts) -> bindtyscheme (x, ts, curG)) g bindings in
+                    let (t0, c0) = typeof exp1 g delta pi in
+                    (*get first gamma, constraint, pTy, and eTy for folding later*)
+                    let (g1, c1, pTy1, rTy1) = 
+                    let (tyOfp1, cOfp1) = infer_pattern p1 in
+                    let (bindings1, cBindings) = extract_tau_params cOfp1 p1 tyOfp1 in
+                    let newG = appendGamma bindings1 g in 
+                    let result1ty, result1C = typeof e1 newG delta pi in
+                    
+                    (newG, (c0 ^^^ result1C ^^^ (t0 ^^ tyOfp1) ^^^ cBindings), tyOfp1, result1ty) in
 
-              (newG, (c0 ^^^ result1C ^^^ (t0 ^^ tyOfp1) ^^^ cBindings), tyOfp1, result1ty) in
-
-            let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
-              let (curPTy, curPC) = infer (LITERAL(PATTERNV(curP))) in (*shouldn't need curG here*)
-              let (curBindings, curBindingsC) = extract_tau_params curPC curP pTy1 in
-              let nextG = appendGamma curBindings curG in
-              let (curResTy, curResC) = typeof curE nextG delta pi in
-              let nextC = curC ^^^ curBindingsC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ (t0 ^^ curPTy)  in
-              (nextG, nextC)
-            ) (g1, c1) pairs in
-            (rTy1, finalC)
-          | _ -> raise (Ill_Typed "bad match inference"))
+                    let (finalG, finalC) = List.fold_left (fun (curG, curC) (curP, curE) ->
+                    let (curPTy, curPC) = infer_pattern curP in (*shouldn't need curG here*)
+                    let (curBindings, curBindingsC) = extract_tau_params curPC curP pTy1 in
+                    let nextG = appendGamma curBindings curG in
+                    let (curResTy, curResC) = typeof curE nextG delta pi in
+                    let nextC = curC ^^^ curBindingsC ^^^ (curPTy ^^ pTy1) ^^^ (curResTy ^^ rTy1) ^^^ (t0 ^^ curPTy)  in
+                    (nextG, nextC)
+                    ) (g1, c1) pairs in
+                    (rTy1, finalC)
+                | _ -> raise (Ill_Typed "bad match inference")) 
+            in
+            let (env, _) = g in
+            let _ = validate_patterns (List.map (fun (p, e) -> p) ps_exps) pi env in
+            result 
     (* 
        Given a pattern, determine the type of the pattern w/ constraints
 
@@ -1116,10 +1124,11 @@ let rec typeof exp g delta pi =
     and infer_pattern = function 
         | VALUE v           -> inferLiteral v
         | GENERIC _         -> (freshtyvar (), TRIVIAL)
-        | PATTERN ("TUPLE", ps) -> 
-            let (ps_taus, c) = patterns_of ps in 
-            (tuplety ps_taus, c)
-        | PATTERN (n, ps)   -> 
+        | PATTERN (n, ps)   -> match n with 
+            | "TUPLE" | "PARAMETERS" -> 
+                let (ps_taus, c) = patterns_of ps in 
+                (tuplety ps_taus, c)
+            | _ -> 
             let fresh_tau = freshInstance (findTyscheme n g) in
             let pattern_tau = freshtyvar () in 
             let (ps_taus, c) = patterns_of ps in 
@@ -1308,12 +1317,15 @@ let initial_basis =
     ("NIL", TYPECONS (fun arg -> match arg with 
                                 | [] -> NIL
                                 | _ -> raise (Ill_Typed "NIL applied to args")),
-            funtype([], (listty alpha)))
+            funtype([], (listty alpha)));
+    ("TUPLE", TYPECONS (fun args -> TUPLEV args), funtype ([], TYCON "*"));
+    ("PARAMETERS", TYPECONS (fun args -> raise (Runtime_Error "Cannot use predefined parameters datatype")),
+            funtype ([], TYCON "parameters"))
     ]
 (* 
   Environment association list of names to list of pattern constructors
 *)
-let pi = [("list", list_patterns); ("*", []);]
+let pi = [("list", list_patterns); ("*", []); ("parameters", [])]
 let delta = [("int", TYPE); ("bool", TYPE); ("string", TYPE); ("list", INWAITING ([TYPE], TYPE)); ]
 
 (*
