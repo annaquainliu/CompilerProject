@@ -227,6 +227,8 @@ and pattern_list_to_string = function
 and pattern_to_string = function 
         | (GENERIC x) -> x
         | PATTERN ("TUPLE", list) -> "{" ^ pattern_list_to_string list ^ "}"
+        | PATTERN ("PARAMETERS", list) -> 
+            pop_first_char (List.fold_left (fun acc p -> acc ^ " " ^ pattern_to_string p) "" list)
         | PATTERN (name, list) -> 
             (match list with 
             | [] ->  name
@@ -496,7 +498,10 @@ let rec pattern_exhaust ideals user_matches = (match (ideals, user_matches) with
     | (i::is), [(GENERIC _)] -> true
     | [], []       -> true 
     | [], (x::xs) -> raise (Pattern_Matching ((pattern_to_string x) ^ " will never be reached."))
-    | (x::xs), [] -> raise (Pattern_Matching ((pattern_to_string x) ^ " is not matched in your patterns."))
+    | (x::xs), [] -> raise (Pattern_Matching ("Non-exhaustive pattern matching. " 
+                                                    ^ (pattern_to_string x) 
+                                                    ^ " is an example of a case that is not matched"
+                                                    ^ " in your patterns."))
     | _, _ -> 
         let (pairs, left_over_users, left_over_ideals) = find_pairs ideals user_matches in
         let left_over_ideals = List.rev left_over_ideals in
