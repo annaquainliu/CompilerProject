@@ -570,6 +570,7 @@ let tokenize queue =
                     let param = PATTERN (name, cons_params) in 
                     param
             | "{" ->  tuple_pattern (tokenWhileDelim "}" tokenPattern) 
+            | "[" ->  value_to_pattern (tokenList (Queue.pop queue))
             | "false" -> VALUE (BOOLV false)
             | "true"  -> VALUE (BOOLV true)
             | "\"" -> let p = VALUE (STRING (Queue.pop queue)) in 
